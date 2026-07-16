@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -400,13 +401,16 @@ def test_powershell_scripts_parse() -> None:
     for script in WINDOWS.glob("*.ps1"):
         command = (
             "$tokens=$null;$errors=$null;"
-            "[System.Management.Automation.Language.Parser]::ParseFile($args[0],[ref]$tokens,[ref]$errors)|Out-Null;"
+            "$path=[Environment]::GetEnvironmentVariable('COE_PS_PARSE_TARGET','Process');"
+            "if([string]::IsNullOrWhiteSpace($path)){Write-Error 'Missing parser target';exit 2};"
+            "[System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)|Out-Null;"
             "if($errors.Count -gt 0){$errors|ForEach-Object{$_.Message};exit 1}"
         )
         result = subprocess.run(
-            [parser, "-NoProfile", "-Command", command, str(script)],
+            [parser, "-NoProfile", "-NonInteractive", "-Command", command],
             check=False,
             capture_output=True,
             text=True,
+            env={**os.environ, "COE_PS_PARSE_TARGET": str(script.resolve())},
         )
         assert result.returncode == 0, f"{script.name}: {result.stdout} {result.stderr}"
