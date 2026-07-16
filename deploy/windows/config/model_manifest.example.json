@@ -1,0 +1,11 @@
+{
+  "model_manifest_schema_version": "1.0.0",
+  "status": "no-model-installed",
+  "semantic_stage_enabled": false,
+  "model_id": null,
+  "model_revision": null,
+  "weights_sha256": null,
+  "tokenizer_sha256": null,
+  "license_review_ref": null,
+  "note": "Exact terminology matching is CPU-only. Populate and approve this manifest before enabling a future CUDA semantic stage."
+}

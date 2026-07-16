@@ -1,0 +1,32 @@
+{
+  "$id": "https://coe.example.invalid/schemas/protected/1.0.0/data_use_attestation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "approval_refs": {
+      "additionalProperties": false,
+      "properties": {
+        "data_owner": {"maxLength": 256, "minLength": 1, "type": "string"},
+        "privacy": {"maxLength": 256, "minLength": 1, "type": "string"},
+        "security": {"maxLength": 256, "minLength": 1, "type": "string"}
+      },
+      "required": ["data_owner", "privacy"],
+      "type": "object"
+    },
+    "approved": {"const": true},
+    "attestation_schema_version": {"const": "1.0.0"},
+    "output_classification": {"const": "protected_aggregate"},
+    "profile": {"const": "protected_phi_local"},
+    "retention_policy_id": {"maxLength": 256, "minLength": 1, "type": "string"}
+  },
+  "required": [
+    "approval_refs",
+    "approved",
+    "attestation_schema_version",
+    "output_classification",
+    "profile",
+    "retention_policy_id"
+  ],
+  "title": "COE protected-local data-use attestation",
+  "type": "object"
+}

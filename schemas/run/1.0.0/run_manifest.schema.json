@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coe:schema:run-manifest:1.0.0",
+  "type": "object", "additionalProperties": false,
+  "required": [
+    "run_manifest_schema_version", "run_id", "run_fingerprint", "status", "source_profile", "snapshot",
+    "references", "config", "curation_snapshot", "implementation"
+  ],
+  "properties": {
+    "run_manifest_schema_version": {"const": "1.0.0"}, "run_id": {"type": "string", "format": "uuid"},
+    "run_fingerprint": {"$ref": "#/$defs/sha256"}, "status": {"const": "succeeded"},
+    "source_profile": {"const": "synthetic-only"},
+    "snapshot": {"type": "object"}, "references": {"type": "array", "minItems": 1},
+    "config": {"type": "object"}, "curation_snapshot": {"type": "object"}, "implementation": {"type": "object"}
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}
+

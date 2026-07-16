@@ -1,0 +1,62 @@
+services:
+  coe:
+    image: "${COE_IMAGE_NAME:-coe-protected-local:0.2.0a1}"
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gpu
+      args:
+        PYTHON_BASE_IMAGE: ${COE_PYTHON_BASE_IMAGE:?Set COE_PYTHON_BASE_IMAGE to an approved digest-pinned image}
+      network: none
+    network_mode: "none"
+    read_only: true
+    user: "65532:65532"
+    restart: "no"
+    stdin_open: false
+    tty: false
+    ipc: private
+    pids_limit: 256
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities:
+                - gpu
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=0700
+    environment:
+      COE_REQUIRE_GPU: ${COE_REQUIRE_GPU:-0}
+      COE_MAX_FILES: "${COE_MAX_FILES:-}"
+      COE_MAX_TOTAL_BYTES: "${COE_MAX_TOTAL_BYTES:-}"
+      COE_MAX_TOTAL_TOKENS: "${COE_MAX_TOTAL_TOKENS:-}"
+      COE_MAX_TOTAL_NGRAMS: "${COE_MAX_TOTAL_NGRAMS:-}"
+      COE_MAX_NGRAM_TOKENS: "${COE_MAX_NGRAM_TOKENS:-}"
+      COE_MAX_CANDIDATES_PER_PHRASE_SYSTEM: "${COE_MAX_CANDIDATES_PER_PHRASE_SYSTEM:-}"
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      PIP_NO_INDEX: "1"
+      DO_NOT_TRACK: "1"
+    volumes:
+      - type: bind
+        source: ${COE_CORPUS_PATH:?Set COE_CORPUS_PATH}
+        target: /data/corpus
+        read_only: true
+      - type: bind
+        source: ${COE_REFERENCE_SET_PATH:?Set COE_REFERENCE_SET_PATH}
+        target: /data/references
+        read_only: true
+      - type: bind
+        source: ${COE_ATTESTATION_PATH:?Set COE_ATTESTATION_PATH}
+        target: /control/data_use_attestation.json
+        read_only: true
+      - type: bind
+        source: ${COE_OUTPUT_STAGING_PATH:?Set COE_OUTPUT_STAGING_PATH to the unique one-run staging directory}
+        target: /data/output
+        read_only: false

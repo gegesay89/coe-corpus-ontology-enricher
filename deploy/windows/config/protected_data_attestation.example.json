@@ -1,0 +1,12 @@
+{
+  "attestation_schema_version": "1.0.0",
+  "profile": "protected_phi_local",
+  "approved": false,
+  "approval_refs": {
+    "data_owner": "REPLACE-WITH-DATA-OWNER-APPROVAL-REFERENCE",
+    "privacy": "REPLACE-WITH-PRIVACY-APPROVAL-REFERENCE",
+    "security": "REPLACE-WITH-SECURITY-APPROVAL-REFERENCE"
+  },
+  "retention_policy_id": "REPLACE-WITH-RETENTION-POLICY-IDENTIFIER",
+  "output_classification": "protected_aggregate"
+}

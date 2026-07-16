@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coe:schema:snapshot-document:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["doc_id", "path", "sha256", "byte_count", "character_count", "note_type", "language", "extraction_method"],
+  "properties": {
+    "doc_id": {"type": "string", "format": "uuid"},
+    "path": {"type": "string", "pattern": "^documents/[0-9a-f-]{36}\\.txt$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "byte_count": {"type": "integer", "minimum": 0},
+    "character_count": {"type": "integer", "minimum": 0},
+    "note_type": {"type": "string", "minLength": 1},
+    "language": {"type": "string", "minLength": 1},
+    "extraction_method": {"type": "string", "minLength": 1},
+    "subject_group_id": {"type": "null"}
+  }
+}
+

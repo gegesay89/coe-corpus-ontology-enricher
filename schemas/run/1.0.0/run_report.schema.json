@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coe:schema:run-report:1.0.0",
+  "type": "object", "additionalProperties": false,
+  "required": [
+    "run_report_schema_version", "run_id", "run_fingerprint", "status", "preflight", "algorithm_versions",
+    "resource_limits", "grounding", "outcomes", "outcomes_by_system", "totals", "artifacts", "limitations"
+  ],
+  "properties": {
+    "run_report_schema_version": {"const": "1.0.0"}, "run_id": {"type": "string", "format": "uuid"},
+    "run_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "status": {"const": "succeeded"},
+    "preflight": {"type": "object"}, "algorithm_versions": {"type": "object"}, "resource_limits": {"type": "object"},
+    "grounding": {"type": "object"}, "outcomes": {"type": "object"}, "outcomes_by_system": {"type": "object"},
+    "totals": {"type": "object"}, "artifacts": {"type": "array"},
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}

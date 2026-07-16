@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coe:schema:candidate-set:1.0.0",
+  "type": "object", "additionalProperties": false,
+  "required": [
+    "candidate_set_schema_version", "language", "primary_normalized_form", "token_count", "occurrence_count",
+    "document_frequency", "note_type_counts", "system_uri", "release_id", "algorithmic_outcome", "acceptance_state", "candidates"
+  ],
+  "properties": {
+    "candidate_set_schema_version": {"const": "1.0.0"}, "language": {"type": "string"},
+    "primary_normalized_form": {"type": "string"}, "token_count": {"type": "integer", "minimum": 1},
+    "occurrence_count": {"type": "integer", "minimum": 1}, "document_frequency": {"type": "integer", "minimum": 1},
+    "note_type_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "system_uri": {"type": "string"}, "release_id": {"type": "string", "format": "uuid"},
+    "algorithmic_outcome": {"enum": ["unmapped", "grounded_unique", "grounded_ambiguous"]},
+    "acceptance_state": {"type": ["string", "null"], "enum": ["pending", null]},
+    "candidates": {"type": "array", "items": {"$ref": "#/$defs/candidate"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"algorithmic_outcome": {"const": "unmapped"}}},
+      "then": {"properties": {"acceptance_state": {"const": null}, "candidates": {"maxItems": 0}}},
+      "else": {"properties": {"acceptance_state": {"const": "pending"}, "candidates": {"minItems": 1}}}
+    }
+  ],
+  "$defs": {
+    "candidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["code", "release_id", "best_method", "methods", "variants", "rank"],
+      "properties": {
+        "code": {"type": "string"}, "release_id": {"type": "string", "format": "uuid"},
+        "best_method": {"enum": ["exact_preferred", "exact_alias"]},
+        "methods": {"type": "array", "uniqueItems": true, "items": {"enum": ["exact_preferred", "exact_alias"]}},
+        "variants": {"type": "array", "uniqueItems": true, "items": {"enum": ["primary", "casefold"]}},
+        "rank": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

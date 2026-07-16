@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coe:schema:analysis-config:1.0.0",
+  "type": "object", "additionalProperties": false,
+  "required": [
+    "config_schema_version", "config_id", "execution_profile", "note_types", "languages", "terminologies",
+    "normalization", "mining", "matching", "privacy", "resource_limits", "algorithms", "random_seed"
+  ],
+  "properties": {
+    "config_schema_version": {"const": "1.0.0"}, "config_id": {"type": "string", "minLength": 1},
+    "execution_profile": {"const": "offline_synthetic_v0"},
+    "note_types": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "languages": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "terminologies": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/terminology"}},
+    "normalization": {"$ref": "#/$defs/normalization"},
+    "mining": {"$ref": "#/$defs/mining"},
+    "matching": {"$ref": "#/$defs/matching"},
+    "privacy": {"$ref": "#/$defs/privacy"},
+    "resource_limits": {"$ref": "#/$defs/resourceLimits"},
+    "algorithms": {"$ref": "#/$defs/algorithms"},
+    "random_seed": {"const": 0}
+  },
+  "$defs": {
+    "terminology": {
+      "type": "object", "additionalProperties": false,
+      "required": ["system_uri", "release_id", "manifest_sha256", "candidate_priority"],
+      "properties": {
+        "system_uri": {"type": "string", "minLength": 1}, "release_id": {"type": "string", "format": "uuid"},
+        "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "candidate_priority": {"type": "integer", "minimum": 1}
+      }
+    },
+    "normalization": {
+      "type": "object", "additionalProperties": false,
+      "required": ["profile_id", "version", "unicode_form", "collapse_whitespace", "primary", "casefold_variant"],
+      "properties": {
+        "profile_id": {"const": "coe-conservative"}, "version": {"const": "1.0.0"},
+        "unicode_form": {"const": "NFC"}, "collapse_whitespace": {"const": true},
+        "primary": {"const": "case-sensitive"}, "casefold_variant": {"const": "unicode-casefold"}
+      }
+    },
+    "mining": {
+      "type": "object", "additionalProperties": false,
+      "required": ["method", "min_ngram_tokens", "max_ngram_tokens", "min_document_frequency", "max_unique_phrases"],
+      "properties": {
+        "method": {"const": "sentence_bounded_token_ngrams"},
+        "min_ngram_tokens": {"type": "integer", "minimum": 1, "maximum": 8},
+        "max_ngram_tokens": {"type": "integer", "minimum": 1, "maximum": 8},
+        "min_document_frequency": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "max_unique_phrases": {"type": "integer", "minimum": 1, "maximum": 1000000}
+      }
+    },
+    "matching": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layers", "active_only", "ambiguity_policy", "auto_acceptance_policy_id", "canonical_target_policy", "max_candidates_per_phrase_system"],
+      "properties": {
+        "layers": {"const": ["exact_preferred", "exact_alias"]}, "active_only": {"const": true},
+        "ambiguity_policy": {"const": "preserve"}, "auto_acceptance_policy_id": {"const": "disabled-v0"},
+        "canonical_target_policy": {"const": "none-review-required"},
+        "max_candidates_per_phrase_system": {"type": "integer", "minimum": 1, "maximum": 100}
+      }
+    },
+    "privacy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["profile_id", "version", "canary_set_version", "fail_closed"],
+      "properties": {
+        "profile_id": {"const": "synthetic-canary-only"}, "version": {"const": "1.0.0"},
+        "canary_set_version": {"const": "1.0.0"}, "fail_closed": {"const": true}
+      }
+    },
+    "resourceLimits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_documents", "max_snapshot_bytes", "max_document_bytes", "max_tokens_per_document", "max_ngrams_per_document", "max_output_records"],
+      "properties": {
+        "max_documents": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "max_snapshot_bytes": {"type": "integer", "minimum": 1, "maximum": 100000000},
+        "max_document_bytes": {"type": "integer", "minimum": 1, "maximum": 10000000},
+        "max_tokens_per_document": {"type": "integer", "minimum": 1, "maximum": 250000},
+        "max_ngrams_per_document": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "max_output_records": {"type": "integer", "minimum": 1, "maximum": 2000000}
+      }
+    },
+    "algorithms": {
+      "type": "object", "additionalProperties": false,
+      "required": ["tokenizer", "normalizer", "span_matcher", "index_schema"],
+      "properties": {
+        "tokenizer": {"const": "coe-regex-tokenizer/1.0.0"},
+        "normalizer": {"const": "coe-conservative/1.0.0"},
+        "span_matcher": {"const": "coe-exact-span/1.0.0"},
+        "index_schema": {"const": "coe-in-memory-exact/1.0.0-synthetic-only"}
+      }
+    }
+  }
+}

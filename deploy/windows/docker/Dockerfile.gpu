@@ -1,0 +1,30 @@
+# Supply an approved, digest-pinned Linux image that already contains Bash and
+# Python 3.12. GPU user-space libraries for the future semantic stage must be
+# present in the offline wheelhouse; the NVIDIA driver remains on Windows.
+ARG PYTHON_BASE_IMAGE
+FROM ${PYTHON_BASE_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=0 \
+    PIP_NO_INDEX=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HUB_OFFLINE=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    DO_NOT_TRACK=1 \
+    HOME=/tmp/coe-home
+
+COPY app/ /bundle/app/
+COPY wheelhouse/ /bundle/wheelhouse/
+COPY docker/run-protected.sh /usr/local/bin/coe-run-protected
+COPY docker/validate_attestation.py /opt/coe-deploy/validate_attestation.py
+
+RUN python -m venv /opt/coe \
+    && /opt/coe/bin/python -m pip install --no-index --find-links=/bundle/wheelhouse /bundle/app/*.whl \
+    && chmod 0555 /usr/local/bin/coe-run-protected /opt/coe-deploy/validate_attestation.py \
+    && rm -rf /bundle
+
+WORKDIR /work
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/coe-run-protected"]

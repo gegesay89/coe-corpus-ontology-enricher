@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coe:schema:phrase-aggregate:1.0.0",
+  "type": "object", "additionalProperties": false,
+  "required": [
+    "phrase_schema_version", "language", "primary_normalized_form", "display", "token_count",
+    "occurrence_count", "document_frequency", "note_type_counts", "max_sublinear_tf_idf"
+  ],
+  "properties": {
+    "phrase_schema_version": {"const": "1.0.0"}, "language": {"type": "string", "minLength": 1},
+    "primary_normalized_form": {"type": "string", "minLength": 1}, "display": {"type": "string", "minLength": 1},
+    "token_count": {"type": "integer", "minimum": 1, "maximum": 8},
+    "occurrence_count": {"type": "integer", "minimum": 1}, "document_frequency": {"type": "integer", "minimum": 1},
+    "note_type_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}},
+    "max_sublinear_tf_idf": {"type": "string", "pattern": "^[0-9]+\\.[0-9]{6}$"}
+  }
+}
+

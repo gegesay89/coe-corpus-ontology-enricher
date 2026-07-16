@@ -1,0 +1,50 @@
+{
+  "$id": "https://coe.example.invalid/schemas/governance/1.0.0/terminology_entitlement_assertion.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "asserted_by_role": {"const": "project_owner"},
+    "asserted_on": {"format": "date", "type": "string"},
+    "assertion_ref": {"minLength": 1, "type": "string"},
+    "controlled_uses": {
+      "additionalProperties": false,
+      "properties": {
+        "analysis_use_permitted": {"const": true},
+        "copy_derived_indexes_to_authorized_project_hosts": {"const": true},
+        "create_private_derived_indexes": {"const": true}
+      },
+      "required": [
+        "analysis_use_permitted",
+        "copy_derived_indexes_to_authorized_project_hosts",
+        "create_private_derived_indexes"
+      ],
+      "type": "object"
+    },
+    "license_evidence_status": {"const": "not_attached_to_portable_bundle"},
+    "public_redistribution_status": {"const": "not_asserted"},
+    "review_due_on": {"format": "date", "type": "string"},
+    "schema_version": {"const": "1.0.0"},
+    "terminologies": {
+      "items": {
+        "enum": ["cpt", "hcpcs", "icd10cm", "icd10pcs", "loinc", "rxnorm", "snomed"]
+      },
+      "minItems": 7,
+      "maxItems": 7,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "asserted_by_role",
+    "asserted_on",
+    "assertion_ref",
+    "controlled_uses",
+    "license_evidence_status",
+    "public_redistribution_status",
+    "review_due_on",
+    "schema_version",
+    "terminologies"
+  ],
+  "title": "COE terminology entitlement assertion",
+  "type": "object"
+}

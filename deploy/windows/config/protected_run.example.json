@@ -1,0 +1,23 @@
+{
+  "protected_run_profile_schema_version": "1.0.0",
+  "environment": "protected-local",
+  "runtime": "native-windows",
+  "network_policy": "dedicated-python-outbound-block-required",
+  "input_policy": {
+    "plaintext_corpus": "read-only-and-hash-verified",
+    "licensed_reference_set": "seven-index-read-only-and-hash-verified",
+    "data_use_attestation": "read-only-and-hash-verified",
+    "output": "restricted-write"
+  },
+  "output_classification": "protected_aggregate",
+  "exact_matching": {
+    "device": "cpu"
+  },
+  "semantic_matching": {
+    "enabled": false,
+    "device_when_enabled": "cuda",
+    "acceptance_state": "pending-only"
+  },
+  "telemetry_enabled": false,
+  "external_api_use_permitted": false
+}

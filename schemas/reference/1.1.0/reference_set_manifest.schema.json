@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  },
+  "$id": "https://coe.example.invalid/schemas/reference/1.1.0/reference_set_manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "entitlement": {
+      "additionalProperties": false,
+      "properties": {
+        "asserted_on": {"format": "date", "type": "string"},
+        "assertion_ref": {"minLength": 1, "type": "string"},
+        "assertion_sha256": {"$ref": "#/$defs/sha256"},
+        "public_redistribution_status": {"const": "not_asserted"},
+        "review_due_on": {"format": "date", "type": "string"}
+      },
+      "required": [
+        "asserted_on",
+        "assertion_ref",
+        "assertion_sha256",
+        "public_redistribution_status",
+        "review_due_on"
+      ],
+      "type": "object"
+    },
+    "index_count": {"maximum": 7, "minimum": 1, "type": "integer"},
+    "indexes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "active_count": {"minimum": 0, "type": "integer"},
+          "alias_count": {"minimum": 0, "type": "integer"},
+          "code_count": {"minimum": 1, "type": "integer"},
+          "content_set_sha256": {"$ref": "#/$defs/sha256"},
+          "designation_count": {"minimum": 1, "type": "integer"},
+          "effective_date": {"format": "date", "type": "string"},
+          "file_name": {"pattern": "^[a-z0-9]+\\.sqlite3$", "type": "string"},
+          "inactive_count": {"minimum": 0, "type": "integer"},
+          "index_sha256": {"$ref": "#/$defs/sha256"},
+          "manifest_sha256": {"$ref": "#/$defs/sha256"},
+          "profile_sha256": {"$ref": "#/$defs/sha256"},
+          "release_id": {"format": "uuid", "type": "string"},
+          "source_sha256": {"$ref": "#/$defs/sha256"},
+          "system_name": {"minLength": 1, "type": "string"},
+          "system_uri": {"format": "uri", "type": "string"},
+          "terminology": {
+            "enum": ["cpt", "hcpcs", "icd10cm", "icd10pcs", "loinc", "rxnorm", "snomed"]
+          },
+          "version": {"minLength": 1, "type": "string"}
+        },
+        "required": [
+          "active_count",
+          "alias_count",
+          "code_count",
+          "content_set_sha256",
+          "designation_count",
+          "effective_date",
+          "file_name",
+          "inactive_count",
+          "index_sha256",
+          "manifest_sha256",
+          "profile_sha256",
+          "release_id",
+          "source_sha256",
+          "system_name",
+          "system_uri",
+          "terminology",
+          "version"
+        ],
+        "type": "object"
+      },
+      "maxItems": 7,
+      "minItems": 1,
+      "type": "array"
+    },
+    "patient_data_included": {"const": false},
+    "reference_set_manifest_schema_version": {"const": "1.0.0"},
+    "set_content_sha256": {"$ref": "#/$defs/sha256"},
+    "usage_profile": {"const": "private-controlled-analysis"}
+  },
+  "required": [
+    "entitlement",
+    "index_count",
+    "indexes",
+    "patient_data_included",
+    "reference_set_manifest_schema_version",
+    "set_content_sha256",
+    "usage_profile"
+  ],
+  "title": "COE licensed reference set manifest",
+  "type": "object"
+}

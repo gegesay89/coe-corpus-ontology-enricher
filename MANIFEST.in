@@ -1,0 +1,11 @@
+include COE_DESIGN_AND_PLAN.md
+include README.md
+include SECURITY.md
+include uv.lock
+recursive-include deploy *
+recursive-include docs *.md
+recursive-include governance *.json
+recursive-include migrations *.md
+recursive-include schemas *.json
+recursive-include specs *.json
+recursive-include tools *.py

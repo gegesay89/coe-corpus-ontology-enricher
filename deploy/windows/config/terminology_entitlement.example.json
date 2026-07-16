@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "asserted_by_role": "project_owner",
+  "asserted_on": "1970-01-01",
+  "assertion_ref": "REPLACE-WITH-LICENSE-ASSERTION-REFERENCE",
+  "controlled_uses": {
+    "analysis_use_permitted": false,
+    "copy_derived_indexes_to_authorized_project_hosts": false,
+    "create_private_derived_indexes": false
+  },
+  "license_evidence_status": "not_attached_to_portable_bundle",
+  "public_redistribution_status": "not_asserted",
+  "review_due_on": "1970-01-01",
+  "terminologies": [
+    "cpt",
+    "hcpcs",
+    "icd10cm",
+    "icd10pcs",
+    "loinc",
+    "rxnorm",
+    "snomed"
+  ]
+}

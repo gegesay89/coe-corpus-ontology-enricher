@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coe:schema:snapshot-manifest:1.0.0",
+  "title": "COE snapshot manifest 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_schema_version", "documents_schema_version", "snapshot_id", "snapshot_iri",
+    "created_at", "source_environment_classification", "document_count", "total_bytes",
+    "total_characters", "note_type_counts", "language_counts", "extraction_method_counts",
+    "documents_index", "deidentification_attestation", "content_set_sha256", "upstream_extractor",
+    "deidentification_profile", "privacy_approval_ref", "retention_policy_id", "parent_snapshot_id"
+  ],
+  "properties": {
+    "manifest_schema_version": {"const": "1.0.0"},
+    "documents_schema_version": {"const": "1.0.0"},
+    "snapshot_id": {"type": "string", "format": "uuid"},
+    "snapshot_iri": {"type": "string", "format": "uri"},
+    "created_at": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "source_environment_classification": {"const": "synthetic"},
+    "document_count": {"type": "integer", "minimum": 0, "maximum": 10000},
+    "total_bytes": {"type": "integer", "minimum": 0, "maximum": 100000000},
+    "total_characters": {"type": "integer", "minimum": 0},
+    "note_type_counts": {"$ref": "#/$defs/countMap"},
+    "language_counts": {"$ref": "#/$defs/countMap"},
+    "extraction_method_counts": {"$ref": "#/$defs/countMap"},
+    "documents_index": {"$ref": "#/$defs/fileDigest"},
+    "deidentification_attestation": {"$ref": "#/$defs/fileDigest"},
+    "content_set_sha256": {"$ref": "#/$defs/sha256"},
+    "upstream_extractor": {"$ref": "#/$defs/tool"},
+    "deidentification_profile": {"$ref": "#/$defs/tool"},
+    "privacy_approval_ref": {"const": "TEST-ONLY"},
+    "retention_policy_id": {"const": "fixture-only"},
+    "parent_snapshot_id": {"type": ["string", "null"], "format": "uuid"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "countMap": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "tool": {
+      "type": "object", "additionalProperties": false, "required": ["name", "version"],
+      "properties": {"name": {"type": "string", "minLength": 1}, "version": {"type": "string", "minLength": 1}}
+    },
+    "fileDigest": {
+      "type": "object", "additionalProperties": false, "required": ["path", "byte_count", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "byte_count": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}
+
