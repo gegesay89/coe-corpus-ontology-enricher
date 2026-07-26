@@ -38,6 +38,6 @@ def test_probe_parses_nvidia_devices(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
     )
     report = doctor.probe_host(require_nvidia=True)
-    assert report["gpu_semantic_stage"] == "available"
+    assert report["gpu_semantic_stage"] == "reserved_not_implemented"
     devices = report["nvidia"]["devices"]  # type: ignore[index]
     assert devices[0]["memory_total_mib"] == 49140  # type: ignore[index]

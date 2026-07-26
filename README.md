@@ -1,12 +1,12 @@
 # COE Corpus Ontology Enricher
 
-COE v0.2 alpha is a standalone, offline terminology-analysis system with three deliberately separate execution profiles:
+COE v0.3 alpha is a standalone, offline corpus-ontology-enrichment system with three deliberately separate execution profiles:
 
-- a PHI-free synthetic vertical slice for deterministic regression testing;
+- a PHI-free synthetic vertical slice for deterministic regression testing, with a completable hash-chained curation workflow;
 - a private licensed-reference importer that builds immutable, cross-platform SQLite indexes; and
-- a protected-local plaintext runner that emits aggregate coding evidence without paths, document identifiers, snippets, phrases, or unmapped text.
+- a protected-local plaintext runner that produces the four corpus-enrichment outputs — coding frequency, dataset lexical forms (synonym evidence), unmapped candidate terms, and code co-occurrence associations — under a small-cell suppression floor, a deterministic scrub filter, and an explicit lexical-output attestation gate.
 
-It is not a publication system or a clinical decision system. Candidate evidence is not acceptance, coding counts are not clinical prevalence, and all protected derivatives remain restricted.
+It is not a publication system or a clinical decision system. Candidate evidence is not acceptance, coding counts are not clinical prevalence, association rows are co-mention statistics and not clinical relationships, and all protected derivatives remain restricted.
 
 ## Install and test
 
@@ -19,7 +19,11 @@ uv run ruff check .
 uv run pytest
 ```
 
-## Synthetic regression slice
+## Matching
+
+Phrase-to-code resolution is exact-first with deterministic, grounding-safe variants: punctuation-compacted forms, a curated unambiguous clinical abbreviation map (for example `HTN` resolving to a release's `hypertension` designation), and conservative singularization. Every emitted code must exist in a pinned release — variants add dictionary lookups, never fabricated codes. Sentence mining treats a single newline as soft so hard-wrapped clinical text keeps its phrases; blank lines, terminal punctuation, and bullet lines split.
+
+## Synthetic regression slice and curation
 
 ```bash
 uv run coe demo create demo
@@ -33,7 +37,24 @@ uv run coe run \
   --output out
 ```
 
-This original v0 path remains synthetic-only and writes deterministic phrase and candidate-set artifacts for testing.
+Curation is completable: decisions are recorded as an append-only, hash-chained JSONL file, pinned by an immutable snapshot, and applied on the next run (acceptance states become `curator_accepted` or `curator_rejected`; everything else stays `pending`).
+
+```bash
+uv run coe curation decide \
+  --decisions decisions.jsonl \
+  --form "alpha finding" \
+  --system urn:example:system \
+  --release 00000000-0000-4000-8000-000000000001 \
+  --code U1 --decision accepted --curator reviewer-1
+
+uv run coe curation snapshot \
+  --decisions decisions.jsonl --id review-1 --scope demo --output curation_snapshot.json
+
+uv run coe run \
+  --snapshot demo/snapshot --reference demo/reference --config demo/coe_config.json \
+  --curation-snapshot curation_snapshot.json --curation-decisions decisions.jsonl \
+  --output out --overwrite
+```
 
 ## Build the licensed reference set
 
@@ -51,9 +72,9 @@ uv run coe reference verify-set private_build/references
 
 The set build is atomic. It does not copy raw publisher packages, normalized CSVs, access logs, or credentials into the result. LOINC related search names are preserved as metadata but are not treated as exact synonyms.
 
-## Protected-local aggregate run
+## Protected-local enrichment run
 
-Protected processing requires an affirmative data-owner and privacy attestation matching `schemas/protected/1.0.0/data_use_attestation.schema.json`. The example is intentionally unapproved until an authorized person replaces its placeholders.
+Protected processing requires an affirmative data-owner and privacy attestation matching `schemas/protected/1.1.0/data_use_attestation.schema.json`. The example is intentionally unapproved until an authorized person replaces its placeholders. Lexical outputs (dataset synonyms and unmapped candidate terms) are emitted only when the attestation explicitly sets `lexical_output_approved` to true; coding counts, per-system ambiguity counts, and code-pair associations are always aggregate-only.
 
 ```bash
 uv run coe protected run \
@@ -69,7 +90,13 @@ uv run coe protected run \
   --output /restricted/run/output
 ```
 
-Before consuming or transferring the aggregate result, verify its exact inventory, canonical encoding, artifact and semantic digests, run fingerprint, seven release identities, ambiguity coverage, and every exported code against the same indexes:
+Privacy controls, all recorded in the run report and re-checked by the verifier:
+
+- **Small-cell floor.** Rows whose document count falls below `--min-cell-document-count` (default 3) are suppressed and reported only as suppressed-row counts, so near-unique evidence cannot single out a patient.
+- **Scrub filter.** Any lexical text that would leave the process is rejected if it carries long digit runs, contact markers, or excessive length; scrubbed rows are counted, never emitted.
+- **Association bounds.** Documents with more codes than `--max-association-codes-per-document` are skipped for association counting, and the pair table is hard-capped.
+
+Before consuming or transferring the result, verify its exact inventory, canonical encoding, artifact and semantic digests, run fingerprint, release identities, code grounding (including that no candidate term is actually groundable), floor compliance, and scrub compliance against the same indexes:
 
 ```bash
 uv run coe protected verify \
@@ -83,11 +110,25 @@ uv run coe protected verify \
   --index private_build/references/snomed.sqlite3
 ```
 
-The current protected adapter accepts recursively discovered UTF-8 `.txt` files only. It rejects links, junctions, reparse points, hard links, and nonregular inputs, applies bounded resource limits, reads inputs in place, and atomically writes exactly:
+Runs and verification accept between one and seven releases; the releases supplied to `verify` must be exactly those the run was bound to.
 
-- `coding_counts.jsonl` for uniquely grounded exact evidence;
-- `ambiguity_counts.jsonl` for system-level ambiguous evidence; and
-- `run_report.json` with restricted, path-free provenance and hashes.
+The protected adapter accepts recursively discovered UTF-8 `.txt` files only. It rejects links, junctions, reparse points, hard links, and nonregular inputs, applies bounded resource limits, reads inputs in place, and atomically writes exactly six files:
+
+- `coding_counts.jsonl` — uniquely grounded coding evidence with frequency counts;
+- `ambiguity_counts.jsonl` — per-system ambiguous evidence;
+- `lexical_forms.jsonl` — dataset surface forms per code (synonym evidence; empty unless lexical output is attested);
+- `candidate_terms.jsonl` — ranked frequent unmapped terms with tf-idf salience (empty unless lexical output is attested);
+- `associations.jsonl` — NPMI-scored code co-occurrence pairs; and
+- `run_report.json` with restricted, path-free provenance, software identity, privacy counters, and hashes.
+
+The enriched result exports to interchange formats without any added runtime dependency:
+
+```bash
+uv run coe export csv --run /restricted/run/output --output /restricted/run/csv
+uv run coe export skos --run /restricted/run/output --output /restricted/run/scheme.ttl
+```
+
+The SKOS Turtle carries one `skos:Concept` per coding row (`skos:notation` = the standard code), dataset synonyms as `skos:prefLabel`/`skos:altLabel`, and associations as `skos:related`. Exported files inherit the restricted classification of their source run.
 
 Raw lexical material exists transiently in Python process memory; Python cannot guarantee secure erasure. Host access, swap, crash-dump, endpoint-protection, encryption, and retention controls therefore remain mandatory.
 
@@ -95,13 +136,13 @@ The current hard ceilings (10,000 files and 100,000,000 input bytes) make this a
 
 ## Windows and GPU host
 
-The portable deployment is native-Windows-first so it also works on Windows Server hosts where Docker Desktop may not be supported. See [deploy/windows/README-WINDOWS.md](deploy/windows/README-WINDOWS.md).
+The portable deployment is native-Windows-first so it also works on Windows Server hosts where Docker Desktop may not be supported. See [deploy/windows/README-WINDOWS.md](deploy/windows/README-WINDOWS.md). The Windows output verifier delegates semantic verification to `coe protected verify` — there is one verifier implementation, not two.
 
 ```bash
 uv build
 uv run python tools/build_windows_bundle.py \
-  --wheel dist/coe_corpus_ontology_enricher-0.2.0a1-py3-none-any.whl \
-  --output artifacts/coe-windows-0.2.0a1.zip
+  --wheel dist/coe_corpus_ontology_enricher-0.3.0a1-py3-none-any.whl \
+  --output artifacts/coe-windows-0.3.0a1.zip
 
 uv run python tools/build_reference_bundle.py \
   --reference-set private_build/references \
@@ -110,14 +151,15 @@ uv run python tools/build_reference_bundle.py \
 
 The application archive contains no terminology payload or patient data. The second archive is a controlled licensed asset and contains no patient data.
 
-`coe hardware probe --require-nvidia` fails closed if `nvidia-smi` cannot report an NVIDIA GPU. Exact phrase mining and SQLite lookup intentionally run on CPU; this release does not pretend that those operations benefit from CUDA. The GPU is reserved for a later, separately evaluated semantic-candidate stage with pinned model and runtime provenance.
+`coe hardware probe --require-nvidia` fails closed if `nvidia-smi` cannot report an NVIDIA GPU. Exact phrase mining and SQLite lookup intentionally run on CPU; this release does not pretend that those operations benefit from CUDA. The GPU stage remains reserved and unimplemented.
 
 ## Current boundaries
 
-- Patient inputs and every protected output stay on the authorized host and are treated as restricted data.
-- There is no network, telemetry, automatic acceptance, curation, RDF/FHIR publication, or public export path.
+- Patient inputs and every protected output stay on the authorized host and are treated as restricted data; SKOS/CSV exports of protected runs inherit that classification.
+- There is no network, telemetry, automatic acceptance, or public export path. Curation is explicit and human-recorded; nothing is auto-accepted.
+- Matching is exact-plus-deterministic-variants; there is no embedding or context-qualification stage, so negated, historical, and family-history mentions still count as lexical evidence.
 - The protected adapter has not been connected to a live database, PDF/DOCX extraction path, or a specific remote patient-data layout.
-- The local attestation is an unsigned procedural gate; an authorized reviewer must still verify its corpus scope, purpose, validity window, and approval status before each production run.
+- The local attestation is an unsigned procedural gate; an authorized reviewer must still verify its corpus scope, purpose, validity window, approval status, and lexical-output decision before each production run.
 - CPT source metadata identifies the private Athena export date, not an authoritative CPT edition; publication remains blocked until that edition and destination rights are recorded.
 - GPU model, VRAM, driver, Windows edition, data layout, and WSL compatibility must be measured on the target host rather than inferred.
 

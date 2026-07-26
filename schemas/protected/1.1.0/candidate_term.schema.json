@@ -1,0 +1,47 @@
+{
+  "$id": "https://coe.example.invalid/schemas/protected/1.1.0/candidate_term.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "candidate_term_schema_version": {
+      "const": "1.1.0"
+    },
+    "document_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "form": {
+      "maxLength": 80,
+      "minLength": 1,
+      "type": "string"
+    },
+    "occurrence_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "rank": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "salience": {
+      "pattern": "^[0-9]+\\.[0-9]{6}$",
+      "type": "string"
+    },
+    "token_count": {
+      "maximum": 8,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "candidate_term_schema_version",
+    "document_count",
+    "form",
+    "occurrence_count",
+    "rank",
+    "salience",
+    "token_count"
+  ],
+  "title": "COE protected unmapped candidate term",
+  "type": "object"
+}

@@ -1,0 +1,37 @@
+{
+  "$id": "https://coe.example.invalid/schemas/curation/1.0.0/curation_snapshot.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "curation_snapshot_schema_version": {
+      "const": "1.0.0"
+    },
+    "decision_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "decisions_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "scope": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "curation_snapshot_schema_version",
+    "id",
+    "decision_count",
+    "decisions_sha256",
+    "scope"
+  ],
+  "title": "COE curation snapshot",
+  "type": "object"
+}

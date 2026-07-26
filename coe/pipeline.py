@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 import os
-import platform
 import shutil
 import tempfile
-import unicodedata
 import uuid
 from collections import Counter
-from decimal import getcontext
 from pathlib import Path
 
-from coe import __version__
-from coe.canonical import JsonValue, sha256_bytes, sha256_canonical
+from coe.canonical import JsonValue, sha256_canonical
 from coe.contracts.config import AnalysisConfig, inspect_analysis_config
 from coe.contracts.reference import ReferenceBundle, inspect_reference_bundle
 from coe.contracts.snapshot import SnapshotBundle, inspect_snapshot_bundle
+from coe.curation import CurationSnapshot, decision_lookup, load_snapshot
 from coe.errors import ContractError, OutputExistsError
 from coe.export.jsonl import ArtifactDigest, write_json, write_jsonl
+from coe.identity import implementation_identity
 from coe.mining.ngrams import PhraseAggregate, aggregate_phrases
 from coe.terminology.exact import build_exact_indexes, match_phrase, validate_grounding
 
@@ -34,46 +32,20 @@ GENESIS_CURATION_SHA256 = sha256_canonical(
 )
 
 
-def _implementation_sha256() -> str:
-    package_root = Path(__file__).parent
-    descriptors: list[dict[str, JsonValue]] = []
-    for path in sorted(package_root.rglob("*.py"), key=lambda item: item.relative_to(package_root).as_posix()):
-        raw = path.read_bytes()
-        descriptors.append(
-            {
-                "byte_count": len(raw),
-                "path": path.relative_to(package_root).as_posix(),
-                "sha256": sha256_bytes(raw),
-            }
-        )
-    return sha256_canonical(
-        {"implementation_hash_schema_version": "coe-python-package-v1", "sources": descriptors},
-        domain=b"coe.implementation.v0",
-    )
-
-
-def _implementation_identity() -> dict[str, JsonValue]:
-    return {
-        "coe_version": __version__,
-        "decimal_context_precision": getcontext().prec,
-        "python_version": platform.python_version(),
-        "source_sha256": _implementation_sha256(),
-        "unicode_data_version": unicodedata.unidata_version,
-    }
-
-
 def _fingerprint_payload(
     snapshot: SnapshotBundle,
     references: tuple[ReferenceBundle, ...],
     config: AnalysisConfig,
     implementation: dict[str, JsonValue],
+    curation_id: str,
+    curation_sha256: str,
 ) -> dict[str, JsonValue]:
     return {
         "algorithm_versions": dict(config.algorithms),
         "config_sha256": config.semantic_sha256,
         "curation_snapshot": {
-            "id": GENESIS_CURATION_ID,
-            "sha256": GENESIS_CURATION_SHA256,
+            "id": curation_id,
+            "sha256": curation_sha256,
         },
         "fingerprint_schema_version": "coe-run-fingerprint-v1",
         "implementation": implementation,
@@ -112,6 +84,8 @@ def _materialize(
     grounding_count: int,
     fingerprint: str,
     implementation: dict[str, JsonValue],
+    curation_id: str,
+    curation_sha256: str,
 ) -> dict[str, JsonValue]:
     run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"urn:coe:run:{fingerprint}"))
     phrase_records = tuple(phrase.as_dict() for phrase in phrases)
@@ -125,7 +99,7 @@ def _materialize(
 
     run_manifest: dict[str, JsonValue] = {
         "config": {"config_id": config.config_id, "semantic_sha256": config.semantic_sha256},
-        "curation_snapshot": {"id": GENESIS_CURATION_ID, "sha256": GENESIS_CURATION_SHA256},
+        "curation_snapshot": {"id": curation_id, "sha256": curation_sha256},
         "implementation": implementation,
         "references": [
             {
@@ -167,8 +141,8 @@ def _materialize(
         "limitations": [
             "offline synthetic alpha only",
             "candidate grounding is not acceptance",
-            "all acceptance states remain pending",
-            "no context, fuzzy matching, embeddings, associations, curation, database, or publication",
+            "acceptance states change only through hash-chained curation decisions",
+            "no context qualification, embeddings, or database projection",
             "the in-memory exact index is fixture-only and not a production backend decision",
             "the synthetic privacy canary scanner is not a de-identification method",
         ],
@@ -227,6 +201,46 @@ def _materialize(
     }
 
 
+def _resolve_curation(
+    curation_snapshot: str,
+    curation_decisions: Path | None,
+) -> tuple[str, str, dict[tuple[str, str, str, str], str]]:
+    if curation_snapshot == GENESIS_CURATION_ID:
+        return GENESIS_CURATION_ID, GENESIS_CURATION_SHA256, {}
+    snapshot_file = Path(curation_snapshot)
+    if not snapshot_file.is_file():
+        raise ContractError(
+            "CURATION_SNAPSHOT_UNSUPPORTED",
+            "The curation snapshot must be genesis-v0 or an existing snapshot file.",
+            "curation_snapshot",
+            6,
+        )
+    loaded: CurationSnapshot = load_snapshot(snapshot_file, curation_decisions)
+    return loaded.snapshot_id, loaded.snapshot_sha256, decision_lookup(loaded)
+
+
+def _apply_curation_decisions(
+    candidate_rows: tuple[dict[str, object], ...],
+    decisions: dict[tuple[str, str, str, str], str],
+) -> None:
+    if not decisions:
+        return
+    for row in candidate_rows:
+        if row["algorithmic_outcome"] == "unmapped":
+            continue
+        for candidate in row["candidates"]:  # type: ignore[union-attr]
+            key = (
+                str(row["primary_normalized_form"]),
+                str(row["system_uri"]),
+                str(row["release_id"]),
+                str(candidate["code"]),  # type: ignore[index]
+            )
+            state = decisions.get(key)
+            if state is not None:
+                row["acceptance_state"] = state
+                break
+
+
 def run_v0(
     *,
     snapshot_path: Path,
@@ -234,15 +248,10 @@ def run_v0(
     config_path: Path,
     curation_snapshot: str,
     output_path: Path,
+    curation_decisions: Path | None = None,
     overwrite: bool = False,
 ) -> dict[str, JsonValue]:
-    if curation_snapshot != GENESIS_CURATION_ID:
-        raise ContractError(
-            "CURATION_SNAPSHOT_UNSUPPORTED",
-            "v0 requires the explicit immutable genesis-v0 curation snapshot.",
-            "curation_snapshot",
-            6,
-        )
+    curation_id, curation_sha256, decisions = _resolve_curation(curation_snapshot, curation_decisions)
     if output_path.exists() and not overwrite:
         raise OutputExistsError()
 
@@ -281,10 +290,11 @@ def run_v0(
             ),
         )
     )
+    _apply_curation_decisions(candidate_rows, decisions)
     grounding_count = validate_grounding(candidate_rows, references)
-    implementation = _implementation_identity()
+    implementation = implementation_identity()
     fingerprint = sha256_canonical(
-        _fingerprint_payload(snapshot, references, config, implementation),
+        _fingerprint_payload(snapshot, references, config, implementation, curation_id, curation_sha256),
         domain=b"coe.run-fingerprint.v0",
     )
 
@@ -303,6 +313,8 @@ def run_v0(
             grounding_count,
             fingerprint,
             implementation,
+            curation_id,
+            curation_sha256,
         )
         if output_path.exists():
             backup = parent / f".{output_path.name}.backup-{uuid.uuid4().hex}"

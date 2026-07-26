@@ -69,7 +69,8 @@ def test_cli_protected_run_is_aggregate_only(tmp_path: Path) -> None:
     attestation_value = {
         "approval_refs": {"data_owner": "OWNER-APPROVAL", "privacy": "PRIVACY-APPROVAL"},
         "approved": True,
-        "attestation_schema_version": "1.0.0",
+        "attestation_schema_version": "1.1.0",
+        "lexical_output_approved": False,
         "output_classification": "protected_aggregate",
         "profile": "protected_phi_local",
         "retention_policy_id": "RESTRICTED-LOCAL-30D",
@@ -91,6 +92,8 @@ def test_cli_protected_run_is_aggregate_only(tmp_path: Path) -> None:
             str(index),
             "--output",
             str(output),
+            "--min-cell-document-count",
+            "1",
         ],
         cwd=project,
         check=False,
@@ -104,7 +107,7 @@ def test_cli_protected_run_is_aggregate_only(tmp_path: Path) -> None:
     assert b"patient-name-must-not-export" not in exported
     rows = [json.loads(line) for line in (output / "coding_counts.jsonl").read_text(encoding="utf-8").splitlines()]
     assert rows[0]["code"] == "U1"
-    schemas = project / "schemas/protected/1.0.0"
+    schemas = project / "schemas/protected/1.1.0"
     cases = [
         ("data_use_attestation.schema.json", attestation_value),
         ("coding_count.schema.json", rows[0]),
@@ -131,7 +134,8 @@ def test_cli_protected_verify_uses_seven_verified_sqlite_releases(tmp_path: Path
             {
                 "approval_refs": {"data_owner": "OWNER", "privacy": "PRIVACY"},
                 "approved": True,
-                "attestation_schema_version": "1.0.0",
+                "attestation_schema_version": "1.1.0",
+                "lexical_output_approved": False,
                 "output_classification": "protected_aggregate",
                 "profile": "protected_phi_local",
                 "retention_policy_id": "RESTRICTED-LOCAL-30D",
@@ -155,6 +159,8 @@ def test_cli_protected_verify_uses_seven_verified_sqlite_releases(tmp_path: Path
             *index_arguments,
             "--output",
             str(output),
+            "--min-cell-document-count",
+            "1",
         ],
         cwd=project,
         check=False,
@@ -183,12 +189,15 @@ def test_cli_protected_verify_uses_seven_verified_sqlite_releases(tmp_path: Path
     assert verified.returncode == 0, verified.stdout
     assert json.loads(verified.stdout) == {
         "ambiguity_row_count": 7,
+        "association_row_count": 21,
+        "candidate_term_row_count": 0,
         "coding_count_row_count": 7,
+        "lexical_form_row_count": 0,
         "run_fingerprint": json.loads((output / "run_report.json").read_text(encoding="utf-8"))["run_fingerprint"],
         "semantic_output_sha256": json.loads((output / "run_report.json").read_text(encoding="utf-8"))[
             "semantic_output_sha256"
         ],
         "status": "passed",
         "terminology_count": 7,
-        "verification_schema_version": "protected-output-verification-1.0.0",
+        "verification_schema_version": "protected-output-verification-1.1.0",
     }

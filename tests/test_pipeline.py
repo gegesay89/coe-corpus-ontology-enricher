@@ -203,7 +203,7 @@ def test_versioned_schemas_validate_demo_inputs_and_outputs(demo_root: Path, tmp
             json.loads((demo_root / "reference/terminology_release_manifest.json").read_text(encoding="utf-8")),
         ),
         (
-            project / "schemas/config/1.0.0/analysis_config.schema.json",
+            project / "schemas/config/1.1.0/analysis_config.schema.json",
             json.loads((demo_root / "coe_config.json").read_text(encoding="utf-8")),
         ),
         (
@@ -227,7 +227,7 @@ def test_versioned_schemas_validate_demo_inputs_and_outputs(demo_root: Path, tmp
     cases.extend((designation_schema, row) for row in _jsonl(demo_root / "reference/designations.jsonl"))
     phrase_schema = project / "schemas/run/1.0.0/phrase_aggregate.schema.json"
     cases.extend((phrase_schema, row) for row in _jsonl(output / "phrase_aggregates.jsonl"))
-    candidate_schema = project / "schemas/run/1.0.0/candidate_set.schema.json"
+    candidate_schema = project / "schemas/run/1.1.0/candidate_set.schema.json"
     cases.extend((candidate_schema, row) for row in _jsonl(output / "candidate_sets.jsonl"))
     for schema_path, instance in cases:
         schema = json.loads(schema_path.read_text(encoding="utf-8"))

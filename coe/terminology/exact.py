@@ -7,8 +7,9 @@ from typing import Protocol
 from coe.contracts.reference import ReferenceBundle
 from coe.ingest.normalize import normalize_lexical
 from coe.mining.ngrams import PhraseAggregate
+from coe.terminology.variants import VARIANT_METHOD_PRIORITY, grounded_lookup
 
-_METHOD_PRIORITY = {"exact_preferred": 0, "exact_alias": 1}
+_METHOD_PRIORITY = VARIANT_METHOD_PRIORITY
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,11 +58,8 @@ def match_phrase(
     max_candidates: int,
 ) -> dict[str, object]:
     evidence: dict[str, set[tuple[str, str]]] = defaultdict(set)
-    for kind in ("preferred", "alias"):
-        for hit in index.lookup(phrase.primary, kind=kind, variant="primary"):
-            evidence[hit.code].add((hit.method, hit.variant))
-        for hit in index.lookup(phrase.folded, kind=kind, variant="casefold"):
-            evidence[hit.code].add((hit.method, hit.variant))
+    for code, items in grounded_lookup(index, phrase.primary, phrase.folded).items():
+        evidence[code].update(items)
     if len(evidence) > max_candidates:
         from coe.errors import ContractError
 
@@ -97,7 +95,7 @@ def match_phrase(
     return {
         "acceptance_state": None if outcome == "unmapped" else "pending",
         "algorithmic_outcome": outcome,
-        "candidate_set_schema_version": "1.0.0",
+        "candidate_set_schema_version": "1.1.0",
         "candidates": candidates,
         "document_frequency": phrase.document_frequency,
         "language": phrase.language,

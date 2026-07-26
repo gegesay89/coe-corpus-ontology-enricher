@@ -117,7 +117,7 @@ def inspect_analysis_config(
         (),
         "coe_config.json",
     )
-    if value["config_schema_version"] != "1.0.0" or value["execution_profile"] != "offline_synthetic_v0":
+    if value["config_schema_version"] != "1.1.0" or value["execution_profile"] != "offline_synthetic_v0":
         raise ContractError(
             "UNSAFE_PROFILE", "Only the offline_synthetic_v0 execution profile is supported.", "coe_config.json", 4
         )
@@ -250,7 +250,14 @@ def inspect_analysis_config(
         "coe_config.json.matching",
     )
     matching_ok = (
-        matching["layers"] == ["exact_preferred", "exact_alias"]
+        matching["layers"]
+        == [
+            "exact_preferred",
+            "exact_alias",
+            "variant_compact",
+            "variant_abbreviation",
+            "variant_singular",
+        ]
         and require_bool(matching["active_only"], "coe_config.json.matching.active_only")
         and matching["ambiguity_policy"] == "preserve"
         and matching["auto_acceptance_policy_id"] == "disabled-v0"
@@ -324,7 +331,7 @@ def inspect_analysis_config(
     algorithms_value = require_object(value["algorithms"], "coe_config.json.algorithms")
     require_exact_keys(
         algorithms_value,
-        ("tokenizer", "normalizer", "span_matcher", "index_schema"),
+        ("tokenizer", "normalizer", "span_matcher", "index_schema", "mining", "variant_matcher"),
         (),
         "coe_config.json.algorithms",
     )
@@ -334,8 +341,10 @@ def inspect_analysis_config(
     if algorithms != {
         "tokenizer": "coe-regex-tokenizer/1.0.0",
         "normalizer": "coe-conservative/1.0.0",
-        "span_matcher": "coe-exact-span/1.0.0",
+        "span_matcher": "coe-exact-span/1.1.0",
         "index_schema": "coe-in-memory-exact/1.0.0-synthetic-only",
+        "mining": "coe-sentence-bounded-token-ngrams/1.1.0",
+        "variant_matcher": "coe-exact-and-deterministic-variants/1.0.0",
     }:
         raise ContractError(
             "NORMALIZER_INCOMPATIBLE",

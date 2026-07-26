@@ -57,6 +57,7 @@ def test_templates_are_safe_by_default_and_contain_no_payload_paths() -> None:
         "approval_refs",
         "approved",
         "attestation_schema_version",
+        "lexical_output_approved",
         "output_classification",
         "profile",
         "retention_policy_id",
@@ -253,7 +254,7 @@ def test_compose_enforces_no_network_nonroot_readonly_inputs_and_restricted_outp
 def test_container_wrapper_pins_image_id_and_atomically_publishes_staged_output() -> None:
     wrapper = _read(WINDOWS / "Invoke-WslDocker.ps1")
 
-    assert '$expectedImageTag = "coe-protected-local:0.2.0a1"' in wrapper
+    assert '$expectedImageTag = "coe-protected-local:0.3.0a1"' in wrapper
     assert 'docker.exe image inspect --format "{{.Id}}"' in wrapper
     assert "^sha256:[0-9a-f]{64}$" in wrapper
     assert "$env:COE_IMAGE_NAME = $containerImageId" in wrapper
@@ -284,7 +285,8 @@ def test_dockerfile_installs_only_code_and_offline_wheels() -> None:
 
 def _attestation() -> dict[str, object]:
     return {
-        "attestation_schema_version": "1.0.0",
+        "attestation_schema_version": "1.1.0",
+        "lexical_output_approved": False,
         "profile": "protected_phi_local",
         "approved": True,
         "approval_refs": {
@@ -355,30 +357,25 @@ def test_container_entrypoint_uses_protected_cli_and_all_seven_indexes() -> None
         assert forbidden not in script
 
 
-def test_output_verifier_streams_and_enforces_aggregate_only_schema() -> None:
+def test_output_verifier_delegates_to_the_trusted_core_verifier() -> None:
     verifier = _read(WINDOWS / "Verify-Run.ps1")
-    assert "IO.StreamReader" in verifier
-    assert "ReadAllText" not in verifier
-    assert "protected-local-1.0.0" in verifier
+    assert "protected-local-1.1.0" in verifier
     assert "protected_aggregate" in verifier
-    assert "coding_counts.jsonl" in verifier
-    assert "ambiguity_counts.jsonl" in verifier
-    assert "unsupported field" in verifier
     assert "ReferenceSetPath" in verifier
     assert "PythonExe" in verifier
     assert "reference verify-set" in verifier
-    assert "verify_licensed_index_set" in verifier
-    assert "code_catalog" in verifier
     assert '"protected", "verify", "--output", $output' in verifier
-    assert "protected-output-verification-1.0.0" in verifier
+    assert "protected-output-verification-1.1.0" in verifier
     assert "trusted_core_verification_schema_version" in verifier
     assert "SetEquals($referenceIdentities)" in verifier
-    assert "maximumLineCharacters = 16384" in verifier
     assert "reportItem.Length -gt 1048576" in verifier
-    assert "Assert-CoeBoundedInteger" in verifier
-    assert "$expectedLimitations" in verifier
-    assert "limitations do not match the approved contract" in verifier
-    assert "max_unique_phrases = 1000000" in verifier
+    assert "unsupported field" in verifier
+    assert "association_row_count" in verifier
+    assert "lexical_form_row_count" in verifier
+    # The wrapper must not re-implement the aggregate row contract: the core
+    # verifier is the single semantic implementation.
+    assert "Test-CoeAggregateRow" not in verifier
+    assert "Get-ExpectedRowFields" not in verifier
 
 
 def test_container_entrypoint_has_valid_bash_syntax() -> None:

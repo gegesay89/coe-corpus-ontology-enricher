@@ -223,7 +223,7 @@ try {
         $env:COE_ATTESTATION_PATH = $attestation
         $env:COE_REQUIRE_GPU = if ($RequireNvidia) { "1" } else { "0" }
         $env:COE_PYTHON_BASE_IMAGE = $PythonBaseImage
-        $expectedImageTag = "coe-protected-local:0.2.0a1"
+        $expectedImageTag = "coe-protected-local:0.3.0a1"
         $env:COE_IMAGE_NAME = $expectedImageTag
         Set-CoeOptionalLimit "MaxFiles" "COE_MAX_FILES" $MaxFiles 10000
         Set-CoeOptionalLimit "MaxTotalBytes" "COE_MAX_TOTAL_BYTES" $MaxTotalBytes 100000000

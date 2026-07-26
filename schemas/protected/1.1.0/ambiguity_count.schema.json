@@ -1,0 +1,42 @@
+{
+  "$id": "https://coe.example.invalid/schemas/protected/1.1.0/ambiguity_count.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "ambiguity_count_schema_version": {
+      "const": "1.1.0"
+    },
+    "ambiguous_document_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ambiguous_form_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ambiguous_occurrence_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "release_id": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "system_uri": {
+      "format": "uri",
+      "maxLength": 2048,
+      "type": "string"
+    }
+  },
+  "required": [
+    "ambiguity_count_schema_version",
+    "ambiguous_document_count",
+    "ambiguous_form_count",
+    "ambiguous_occurrence_count",
+    "release_id",
+    "system_uri"
+  ],
+  "title": "COE protected ambiguity count",
+  "type": "object"
+}

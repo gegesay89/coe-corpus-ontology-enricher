@@ -13,8 +13,11 @@ from coe.contracts.config import inspect_analysis_config, validate_analysis_conf
 from coe.contracts.reference import inspect_reference_bundle, validate_reference_bundle
 from coe.contracts.report import PreflightReport
 from coe.contracts.snapshot import inspect_snapshot_bundle, validate_snapshot_bundle
+from coe.curation import append_decision, write_snapshot
 from coe.demo import create_demo
 from coe.errors import CoeError
+from coe.export.skos import DEFAULT_BASE_IRI, export_skos
+from coe.export.tabular import export_csv
 from coe.governance import inspect_terminology_entitlement
 from coe.pipeline import run_v0
 from coe.protected import ProtectedLimits, run_protected_local
@@ -78,8 +81,36 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--reference", type=Path, action="append", required=True)
     run.add_argument("--config", type=Path, required=True)
     run.add_argument("--curation-snapshot", required=True)
+    run.add_argument("--curation-decisions", type=Path)
     run.add_argument("--output", type=Path, required=True)
     run.add_argument("--overwrite", action="store_true")
+
+    curation = commands.add_parser("curation", help="record and snapshot hash-chained curation decisions")
+    curation_commands = curation.add_subparsers(dest="curation_command", required=True)
+    curation_decide = curation_commands.add_parser("decide", help="append one accept/reject decision")
+    curation_decide.add_argument("--decisions", type=Path, required=True)
+    curation_decide.add_argument("--form", required=True)
+    curation_decide.add_argument("--system", required=True)
+    curation_decide.add_argument("--release", required=True)
+    curation_decide.add_argument("--code", required=True)
+    curation_decide.add_argument("--decision", required=True, choices=("accepted", "rejected"))
+    curation_decide.add_argument("--curator", required=True)
+    curation_decide.add_argument("--note")
+    curation_snapshot = curation_commands.add_parser("snapshot", help="pin the decision chain as a snapshot")
+    curation_snapshot.add_argument("--decisions", type=Path, required=True)
+    curation_snapshot.add_argument("--id", dest="snapshot_id", required=True)
+    curation_snapshot.add_argument("--scope", required=True)
+    curation_snapshot.add_argument("--output", type=Path, required=True)
+
+    export = commands.add_parser("export", help="project run output into interchange formats")
+    export_commands = export.add_subparsers(dest="export_kind", required=True)
+    export_csv_parser = export_commands.add_parser("csv", help="flatten run artifacts to CSV")
+    export_csv_parser.add_argument("--run", type=Path, required=True)
+    export_csv_parser.add_argument("--output", type=Path, required=True)
+    export_skos_parser = export_commands.add_parser("skos", help="emit a SKOS Turtle concept scheme")
+    export_skos_parser.add_argument("--run", type=Path, required=True)
+    export_skos_parser.add_argument("--output", type=Path, required=True)
+    export_skos_parser.add_argument("--base-iri", default=DEFAULT_BASE_IRI)
 
     benchmark = commands.add_parser("benchmark", help="run bounded, non-semantic performance checks")
     benchmark_commands = benchmark.add_subparsers(dest="benchmark_kind", required=True)
@@ -132,7 +163,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default=limit_defaults.max_candidates_per_phrase_system,
     )
     protected_run.add_argument("--max-ngram-tokens", type=int, default=limit_defaults.max_ngram_tokens)
-    protected_verify = protected_commands.add_parser("verify", help="verify aggregate output against seven releases")
+    protected_run.add_argument("--min-cell-document-count", type=int, default=limit_defaults.min_cell_document_count)
+    protected_run.add_argument("--max-candidate-terms", type=int, default=limit_defaults.max_candidate_terms)
+    protected_run.add_argument(
+        "--max-association-codes-per-document",
+        type=int,
+        default=limit_defaults.max_association_codes_per_document,
+    )
+    protected_run.add_argument("--max-association-pairs", type=int, default=limit_defaults.max_association_pairs)
+    protected_verify = protected_commands.add_parser(
+        "verify", help="verify aggregate output against its terminology releases"
+    )
     protected_verify.add_argument("--output", type=Path, required=True)
     protected_verify.add_argument("--index", type=Path, action="append", required=True)
 
@@ -243,6 +284,10 @@ def _handle_protected(args: argparse.Namespace) -> int:
         max_unique_phrases=args.max_unique_phrases,
         max_candidates_per_phrase_system=args.max_candidates_per_phrase_system,
         max_ngram_tokens=args.max_ngram_tokens,
+        min_cell_document_count=args.min_cell_document_count,
+        max_candidate_terms=args.max_candidate_terms,
+        max_association_codes_per_document=args.max_association_codes_per_document,
+        max_association_pairs=args.max_association_pairs,
     )
     with ExitStack() as stack:
         indexes = tuple(stack.enter_context(SQLiteTerminologyIndex(path)) for path in args.index)
@@ -276,9 +321,40 @@ def main(argv: Sequence[str] | None = None) -> int:
                     config_path=args.config,
                     curation_snapshot=args.curation_snapshot,
                     output_path=args.output,
+                    curation_decisions=args.curation_decisions,
                     overwrite=args.overwrite,
                 )
             )
+            return 0
+        if args.command == "curation":
+            if args.curation_command == "decide":
+                decision = append_decision(
+                    args.decisions,
+                    primary_normalized_form=args.form,
+                    system_uri=args.system,
+                    release_id=args.release,
+                    code=args.code,
+                    decision=args.decision,
+                    curator=args.curator,
+                    note=args.note,
+                )
+                _emit(
+                    {
+                        "code": decision.code,
+                        "decision": decision.decision,
+                        "sequence": decision.sequence,
+                        "status": "recorded",
+                    }
+                )
+                return 0
+            snapshot_value = write_snapshot(args.output, args.decisions, snapshot_id=args.snapshot_id, scope=args.scope)
+            _emit({**snapshot_value, "status": "created"})
+            return 0
+        if args.command == "export":
+            if args.export_kind == "csv":
+                _emit(export_csv(args.run, args.output))
+                return 0
+            _emit(export_skos(args.run, args.output, base_iri=args.base_iri))
             return 0
         if args.command == "benchmark" and args.benchmark_kind == "reference":
             _emit(benchmark_reference(args.path, lookup_count=args.lookups))

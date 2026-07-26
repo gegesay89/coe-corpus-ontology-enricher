@@ -1,0 +1,477 @@
+{
+  "$defs": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "media_type": {
+          "const": "application/x-ndjson"
+        },
+        "path": {
+          "enum": [
+            "ambiguity_counts.jsonl",
+            "associations.jsonl",
+            "candidate_terms.jsonl",
+            "coding_counts.jsonl",
+            "lexical_forms.jsonl"
+          ]
+        },
+        "row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.1.0"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "byte_count",
+        "media_type",
+        "path",
+        "row_count",
+        "schema_version",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "release_id": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "type": "string"
+        },
+        "system_uri": {
+          "format": "uri",
+          "maxLength": 2048,
+          "type": "string"
+        }
+      },
+      "required": [
+        "release_id",
+        "system_uri"
+      ],
+      "type": "object"
+    },
+    "limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_association_codes_per_document": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_association_pairs": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_candidate_terms": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_candidates_per_phrase_system": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_file_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_files": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_ngram_tokens": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_ngrams_per_file": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_tokens_per_file": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_total_ngrams": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_total_tokens": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_unique_phrases": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_walk_entries": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "min_cell_document_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_association_codes_per_document",
+        "max_association_pairs",
+        "max_candidate_terms",
+        "max_candidates_per_phrase_system",
+        "max_file_bytes",
+        "max_files",
+        "max_ngram_tokens",
+        "max_ngrams_per_file",
+        "max_tokens_per_file",
+        "max_total_bytes",
+        "max_total_ngrams",
+        "max_total_tokens",
+        "max_unique_phrases",
+        "max_walk_entries",
+        "min_cell_document_count"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://coe.example.invalid/schemas/protected/1.1.0/run_report.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/artifact"
+      },
+      "maxItems": 5,
+      "minItems": 5,
+      "type": "array"
+    },
+    "attestation": {
+      "additionalProperties": false,
+      "properties": {
+        "approval_ref_count": {
+          "maximum": 3,
+          "minimum": 2,
+          "type": "integer"
+        },
+        "approved": {
+          "const": true
+        },
+        "attestation_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "lexical_output_approved": {
+          "type": "boolean"
+        },
+        "output_classification": {
+          "const": "protected_aggregate"
+        },
+        "profile": {
+          "const": "protected_phi_local"
+        },
+        "retention_policy_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "approval_ref_count",
+        "approved",
+        "attestation_sha256",
+        "lexical_output_approved",
+        "output_classification",
+        "profile",
+        "retention_policy_id"
+      ],
+      "type": "object"
+    },
+    "execution_profile": {
+      "const": "protected_phi_local"
+    },
+    "grounding": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_count_checked": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "const": "passed"
+        }
+      },
+      "required": [
+        "candidate_count_checked",
+        "status"
+      ],
+      "type": "object"
+    },
+    "implementation": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithms": {
+          "additionalProperties": false,
+          "properties": {
+            "association": {
+              "maxLength": 128,
+              "type": "string"
+            },
+            "matching": {
+              "maxLength": 128,
+              "type": "string"
+            },
+            "mining": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          },
+          "required": [
+            "association",
+            "matching",
+            "mining"
+          ],
+          "type": "object"
+        },
+        "coe_version": {
+          "maxLength": 64,
+          "type": "string"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "algorithms",
+        "coe_version",
+        "source_sha256"
+      ],
+      "type": "object"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "matching": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "const": "cpu"
+        },
+        "method": {
+          "const": "exact_and_deterministic_variants"
+        },
+        "nvidia_preflight": {
+          "enum": [
+            "not_required",
+            "passed"
+          ]
+        },
+        "variant_methods": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "device",
+        "method",
+        "nvidia_preflight",
+        "variant_methods"
+      ],
+      "type": "object"
+    },
+    "privacy": {
+      "additionalProperties": false,
+      "properties": {
+        "association_documents_skipped": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "candidate_terms_truncated": {
+          "type": "boolean"
+        },
+        "lexical_output_approved": {
+          "type": "boolean"
+        },
+        "min_cell_document_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "scrubbed_candidate_term_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scrubbed_lexical_form_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "suppressed_association_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "suppressed_candidate_term_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "suppressed_coding_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "suppressed_lexical_form_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "association_documents_skipped",
+        "candidate_terms_truncated",
+        "lexical_output_approved",
+        "min_cell_document_count",
+        "scrubbed_candidate_term_count",
+        "scrubbed_lexical_form_count",
+        "suppressed_association_row_count",
+        "suppressed_candidate_term_count",
+        "suppressed_coding_row_count",
+        "suppressed_lexical_form_count"
+      ],
+      "type": "object"
+    },
+    "processing_totals": {
+      "additionalProperties": false,
+      "properties": {
+        "corpus_content_set_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "file_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "total_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_characters": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_ngrams": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_tokens": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unique_form_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "corpus_content_set_sha256",
+        "file_count",
+        "total_bytes",
+        "total_characters",
+        "total_ngrams",
+        "total_tokens",
+        "unique_form_count"
+      ],
+      "type": "object"
+    },
+    "resource_limits": {
+      "$ref": "#/$defs/limits"
+    },
+    "run_fingerprint": {
+      "$ref": "#/$defs/sha256"
+    },
+    "run_report_schema_version": {
+      "const": "protected-local-1.1.0"
+    },
+    "semantic_output_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "status": {
+      "const": "succeeded"
+    },
+    "terminologies": {
+      "items": {
+        "$ref": "#/$defs/identity"
+      },
+      "maxItems": 7,
+      "minItems": 1,
+      "type": "array"
+    },
+    "totals": {
+      "additionalProperties": false,
+      "properties": {
+        "ambiguity_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "association_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "candidate_term_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "coding_count_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lexical_form_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ambiguity_row_count",
+        "association_row_count",
+        "candidate_term_row_count",
+        "coding_count_row_count",
+        "lexical_form_row_count"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "attestation",
+    "artifacts",
+    "execution_profile",
+    "grounding",
+    "implementation",
+    "limitations",
+    "matching",
+    "privacy",
+    "processing_totals",
+    "resource_limits",
+    "run_fingerprint",
+    "run_report_schema_version",
+    "semantic_output_sha256",
+    "status",
+    "terminologies",
+    "totals"
+  ],
+  "title": "COE protected-local run report",
+  "type": "object"
+}

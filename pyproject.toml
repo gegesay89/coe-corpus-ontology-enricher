@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coe-corpus-ontology-enricher"
-version = "0.2.0a1"
+version = "0.3.0a1"
 description = "Deterministic corpus terminology analysis with controlled licensed-reference and protected-local profiles"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -44,6 +44,11 @@ include = ["coe*"]
   "schemas/reference/1.1.0/reference_set_manifest.schema.json",
 ]
 "share/coe/schemas/config/1.0.0" = ["schemas/config/1.0.0/analysis_config.schema.json"]
+"share/coe/schemas/config/1.1.0" = ["schemas/config/1.1.0/analysis_config.schema.json"]
+"share/coe/schemas/curation/1.0.0" = [
+  "schemas/curation/1.0.0/curation_decision.schema.json",
+  "schemas/curation/1.0.0/curation_snapshot.schema.json",
+]
 "share/coe/schemas/governance/1.0.0" = [
   "schemas/governance/1.0.0/terminology_entitlement_assertion.schema.json",
 ]
@@ -59,6 +64,18 @@ include = ["coe*"]
   "schemas/run/1.0.0/run_manifest.schema.json",
   "schemas/run/1.0.0/run_report.schema.json",
   "schemas/run/1.0.0/artifact_manifest.schema.json",
+]
+"share/coe/schemas/run/1.1.0" = [
+  "schemas/run/1.1.0/candidate_set.schema.json",
+]
+"share/coe/schemas/protected/1.1.0" = [
+  "schemas/protected/1.1.0/data_use_attestation.schema.json",
+  "schemas/protected/1.1.0/coding_count.schema.json",
+  "schemas/protected/1.1.0/ambiguity_count.schema.json",
+  "schemas/protected/1.1.0/lexical_form.schema.json",
+  "schemas/protected/1.1.0/candidate_term.schema.json",
+  "schemas/protected/1.1.0/association.schema.json",
+  "schemas/protected/1.1.0/run_report.schema.json",
 ]
 
 [tool.pytest.ini_options]

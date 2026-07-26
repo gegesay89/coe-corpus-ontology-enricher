@@ -9,7 +9,7 @@ import pytest
 
 from coe.canonical import canonical_json_line
 from coe.errors import ContractError
-from coe.protected import run_protected_local
+from coe.protected import ProtectedLimits, run_protected_local
 from coe.protected_verify import verify_protected_output
 from coe.terminology.exact import DesignationHit
 
@@ -44,7 +44,8 @@ def _write_attestation(path: Path) -> None:
             {
                 "approval_refs": {"data_owner": "OWNER", "privacy": "PRIVACY", "security": "SECURITY"},
                 "approved": True,
-                "attestation_schema_version": "1.0.0",
+                "attestation_schema_version": "1.1.0",
+                "lexical_output_approved": False,
                 "output_classification": "protected_aggregate",
                 "profile": "protected_phi_local",
                 "retention_policy_id": "local-30-days",
@@ -67,6 +68,7 @@ def _valid_output(tmp_path: Path) -> tuple[Path, tuple[_Index, ...]]:
         attestation_path=attestation,
         indexes=indexes,
         output_path=output,
+        limits=ProtectedLimits(min_cell_document_count=1),
     )
     return output, indexes
 
@@ -86,22 +88,47 @@ def test_verify_protected_output_recomputes_integrity_and_grounding(tmp_path: Pa
 
     assert result == {
         "ambiguity_row_count": 7,
+        "association_row_count": 0,
+        "candidate_term_row_count": 0,
         "coding_count_row_count": 1,
+        "lexical_form_row_count": 0,
         "run_fingerprint": _read_report(output)["run_fingerprint"],
         "semantic_output_sha256": _read_report(output)["semantic_output_sha256"],
         "status": "passed",
         "terminology_count": 7,
-        "verification_schema_version": "protected-output-verification-1.0.0",
+        "verification_schema_version": "protected-output-verification-1.1.0",
     }
 
 
-def test_verify_requires_exactly_seven_distinct_releases(tmp_path: Path) -> None:
+def test_verify_requires_the_releases_the_run_was_bound_to(tmp_path: Path) -> None:
     output, indexes = _valid_output(tmp_path)
 
-    with pytest.raises(ContractError, match="Exactly seven") as captured:
+    with pytest.raises(ContractError) as captured:
         verify_protected_output(output_path=output, indexes=indexes[:-1])
 
     assert captured.value.code == "TERMINOLOGY_MISMATCH"
+
+
+def test_verify_accepts_runs_with_fewer_than_seven_releases(tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "record.txt").write_text("Heart attack. MI.", encoding="utf-8")
+    attestation = tmp_path / "attestation.json"
+    _write_attestation(attestation)
+    output = tmp_path / "small-output"
+    indexes = (_Index(0), _Index(1))
+    run_protected_local(
+        corpus_path=corpus,
+        attestation_path=attestation,
+        indexes=indexes,
+        output_path=output,
+        limits=ProtectedLimits(min_cell_document_count=1),
+    )
+
+    result = verify_protected_output(output_path=output, indexes=indexes)
+
+    assert result["status"] == "passed"
+    assert result["terminology_count"] == 2
 
 
 def test_verify_rejects_non_exact_inventory(tmp_path: Path) -> None:

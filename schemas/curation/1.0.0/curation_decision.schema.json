@@ -1,0 +1,66 @@
+{
+  "$id": "https://coe.example.invalid/schemas/curation/1.0.0/curation_decision.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "curation_decision_schema_version": {
+      "const": "1.0.0"
+    },
+    "curator": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "accepted",
+        "rejected"
+      ]
+    },
+    "note": {
+      "maxLength": 1024,
+      "type": "string"
+    },
+    "previous_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "primary_normalized_form": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "release_id": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "sequence": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "system_uri": {
+      "format": "uri",
+      "maxLength": 2048,
+      "type": "string"
+    }
+  },
+  "required": [
+    "curation_decision_schema_version",
+    "sequence",
+    "previous_sha256",
+    "primary_normalized_form",
+    "system_uri",
+    "release_id",
+    "code",
+    "decision",
+    "curator"
+  ],
+  "title": "COE curation decision",
+  "type": "object"
+}

@@ -246,12 +246,14 @@ def _create_config(root: Path, manifest_sha256: str) -> None:
     config: dict[str, JsonValue] = {
         "algorithms": {
             "index_schema": "coe-in-memory-exact/1.0.0-synthetic-only",
+            "mining": "coe-sentence-bounded-token-ngrams/1.1.0",
             "normalizer": "coe-conservative/1.0.0",
-            "span_matcher": "coe-exact-span/1.0.0",
+            "span_matcher": "coe-exact-span/1.1.0",
             "tokenizer": "coe-regex-tokenizer/1.0.0",
+            "variant_matcher": "coe-exact-and-deterministic-variants/1.0.0",
         },
         "config_id": "offline-synthetic-demo-v0",
-        "config_schema_version": "1.0.0",
+        "config_schema_version": "1.1.0",
         "execution_profile": "offline_synthetic_v0",
         "languages": ["en"],
         "matching": {
@@ -259,7 +261,13 @@ def _create_config(root: Path, manifest_sha256: str) -> None:
             "ambiguity_policy": "preserve",
             "auto_acceptance_policy_id": "disabled-v0",
             "canonical_target_policy": "none-review-required",
-            "layers": ["exact_preferred", "exact_alias"],
+            "layers": [
+                "exact_preferred",
+                "exact_alias",
+                "variant_compact",
+                "variant_abbreviation",
+                "variant_singular",
+            ],
             "max_candidates_per_phrase_system": 20,
         },
         "mining": {

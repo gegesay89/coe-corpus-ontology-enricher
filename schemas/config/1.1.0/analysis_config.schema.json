@@ -1,0 +1,317 @@
+{
+  "$defs": {
+    "algorithms": {
+      "additionalProperties": false,
+      "properties": {
+        "index_schema": {
+          "const": "coe-in-memory-exact/1.0.0-synthetic-only"
+        },
+        "mining": {
+          "const": "coe-sentence-bounded-token-ngrams/1.1.0"
+        },
+        "normalizer": {
+          "const": "coe-conservative/1.0.0"
+        },
+        "span_matcher": {
+          "const": "coe-exact-span/1.1.0"
+        },
+        "tokenizer": {
+          "const": "coe-regex-tokenizer/1.0.0"
+        },
+        "variant_matcher": {
+          "const": "coe-exact-and-deterministic-variants/1.0.0"
+        }
+      },
+      "required": [
+        "tokenizer",
+        "normalizer",
+        "span_matcher",
+        "index_schema",
+        "mining",
+        "variant_matcher"
+      ],
+      "type": "object"
+    },
+    "matching": {
+      "additionalProperties": false,
+      "properties": {
+        "active_only": {
+          "const": true
+        },
+        "ambiguity_policy": {
+          "const": "preserve"
+        },
+        "auto_acceptance_policy_id": {
+          "const": "disabled-v0"
+        },
+        "canonical_target_policy": {
+          "const": "none-review-required"
+        },
+        "layers": {
+          "const": [
+            "exact_preferred",
+            "exact_alias",
+            "variant_compact",
+            "variant_abbreviation",
+            "variant_singular"
+          ]
+        },
+        "max_candidates_per_phrase_system": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "layers",
+        "active_only",
+        "ambiguity_policy",
+        "auto_acceptance_policy_id",
+        "canonical_target_policy",
+        "max_candidates_per_phrase_system"
+      ],
+      "type": "object"
+    },
+    "mining": {
+      "additionalProperties": false,
+      "properties": {
+        "max_ngram_tokens": {
+          "maximum": 8,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_unique_phrases": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "method": {
+          "const": "sentence_bounded_token_ngrams"
+        },
+        "min_document_frequency": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "min_ngram_tokens": {
+          "maximum": 8,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "method",
+        "min_ngram_tokens",
+        "max_ngram_tokens",
+        "min_document_frequency",
+        "max_unique_phrases"
+      ],
+      "type": "object"
+    },
+    "normalization": {
+      "additionalProperties": false,
+      "properties": {
+        "casefold_variant": {
+          "const": "unicode-casefold"
+        },
+        "collapse_whitespace": {
+          "const": true
+        },
+        "primary": {
+          "const": "case-sensitive"
+        },
+        "profile_id": {
+          "const": "coe-conservative"
+        },
+        "unicode_form": {
+          "const": "NFC"
+        },
+        "version": {
+          "const": "1.0.0"
+        }
+      },
+      "required": [
+        "profile_id",
+        "version",
+        "unicode_form",
+        "collapse_whitespace",
+        "primary",
+        "casefold_variant"
+      ],
+      "type": "object"
+    },
+    "privacy": {
+      "additionalProperties": false,
+      "properties": {
+        "canary_set_version": {
+          "const": "1.0.0"
+        },
+        "fail_closed": {
+          "const": true
+        },
+        "profile_id": {
+          "const": "synthetic-canary-only"
+        },
+        "version": {
+          "const": "1.0.0"
+        }
+      },
+      "required": [
+        "profile_id",
+        "version",
+        "canary_set_version",
+        "fail_closed"
+      ],
+      "type": "object"
+    },
+    "resourceLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_document_bytes": {
+          "maximum": 10000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_documents": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_ngrams_per_document": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_output_records": {
+          "maximum": 2000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_snapshot_bytes": {
+          "maximum": 100000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_tokens_per_document": {
+          "maximum": 250000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_documents",
+        "max_snapshot_bytes",
+        "max_document_bytes",
+        "max_tokens_per_document",
+        "max_ngrams_per_document",
+        "max_output_records"
+      ],
+      "type": "object"
+    },
+    "terminology": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_priority": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "release_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "system_uri": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "system_uri",
+        "release_id",
+        "manifest_sha256",
+        "candidate_priority"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:coe:schema:analysis-config:1.1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "algorithms": {
+      "$ref": "#/$defs/algorithms"
+    },
+    "config_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "config_schema_version": {
+      "const": "1.1.0"
+    },
+    "execution_profile": {
+      "const": "offline_synthetic_v0"
+    },
+    "languages": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "matching": {
+      "$ref": "#/$defs/matching"
+    },
+    "mining": {
+      "$ref": "#/$defs/mining"
+    },
+    "normalization": {
+      "$ref": "#/$defs/normalization"
+    },
+    "note_types": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "privacy": {
+      "$ref": "#/$defs/privacy"
+    },
+    "random_seed": {
+      "const": 0
+    },
+    "resource_limits": {
+      "$ref": "#/$defs/resourceLimits"
+    },
+    "terminologies": {
+      "items": {
+        "$ref": "#/$defs/terminology"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "config_schema_version",
+    "config_id",
+    "execution_profile",
+    "note_types",
+    "languages",
+    "terminologies",
+    "normalization",
+    "mining",
+    "matching",
+    "privacy",
+    "resource_limits",
+    "algorithms",
+    "random_seed"
+  ],
+  "type": "object"
+}

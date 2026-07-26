@@ -10,7 +10,11 @@ from coe.contracts.snapshot import Document
 from coe.errors import ContractError
 from coe.ingest.normalize import normalize_lexical
 
-_SENTENCE_BOUNDARY = re.compile(r"(?:\r?\n)+|[!?;]+|(?<!\d)\.(?!\d)")
+# A single newline is soft (hard-wrapped clinical text keeps its phrases);
+# a blank line, terminal punctuation, or a bullet/numbered line start splits.
+_SENTENCE_BOUNDARY = re.compile(
+    r"(?:[ \t]*\r?\n){2,}[ \t]*|[!?;]+|(?<!\d)\.(?!\d)|\r?\n(?=[ \t]*(?:[-*•]|\d+[.)])[ \t])"
+)
 _TOKEN = re.compile(r"[^\W_]+(?:[./+-][^\W_]+)*\+?", re.UNICODE)
 
 

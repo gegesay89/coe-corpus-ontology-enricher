@@ -2,8 +2,9 @@
 
 The verifier intentionally emits only path-free summary data and uses fixed,
 sanitized errors. It establishes structural and cryptographic integrity, exact
-release binding, and code grounding; it does not claim source-data provenance
-or cryptographic authenticity.
+release binding, code grounding, small-cell-floor compliance, and scrub-rule
+compliance; it does not claim source-data provenance or cryptographic
+authenticity.
 """
 
 from __future__ import annotations
@@ -25,31 +26,40 @@ from coe.canonical import (
     sha256_canonical,
 )
 from coe.errors import ContractError
+from coe.ingest.normalize import normalize_lexical
 from coe.protected import (
+    FINGERPRINT_DOMAIN,
+    PROTECTED_ARTIFACT_FILES,
     PROTECTED_LIMITATIONS,
+    PROTECTED_ROW_SCHEMA_VERSION,
+    RUN_REPORT_SCHEMA_VERSION,
     ProtectedExactIndex,
     ProtectedLimits,
     _index_identity,
     _ordered_indexes,
+    scrub_allows_form,
 )
+from coe.terminology.variants import VARIANT_METHOD_PRIORITY, grounded_lookup
 
-_EXPECTED_FILES = frozenset({"ambiguity_counts.jsonl", "coding_counts.jsonl", "run_report.json"})
-_EXPECTED_TERMINOLOGY_COUNT = 7
+_EXPECTED_FILES = frozenset(PROTECTED_ARTIFACT_FILES) | {"run_report.json"}
+_MAX_TERMINOLOGY_COUNT = 7
 _MAX_REPORT_BYTES = 1_048_576
 _MAX_JSONL_BYTES = 8_000_000_000
 _MAX_JSONL_LINE_BYTES = 16_384
 _MAX_CODING_ROWS = 7_000_000
-_MAX_AMBIGUITY_ROWS = _EXPECTED_TERMINOLOGY_COUNT
 _SHA256_LENGTH = 64
 _ATTESTATION_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}")
+_SCORE_PATTERN = re.compile(r"^-?[0-9]+\.[0-9]{6}$")
 
 _REPORT_KEYS = (
     "attestation",
     "artifacts",
     "execution_profile",
     "grounding",
+    "implementation",
     "limitations",
     "matching",
+    "privacy",
     "processing_totals",
     "resource_limits",
     "run_fingerprint",
@@ -63,6 +73,7 @@ _ATTESTATION_KEYS = (
     "approval_ref_count",
     "approved",
     "attestation_sha256",
+    "lexical_output_approved",
     "output_classification",
     "profile",
     "retention_policy_id",
@@ -70,7 +81,21 @@ _ATTESTATION_KEYS = (
 _ARTIFACT_KEYS = ("byte_count", "media_type", "path", "row_count", "schema_version", "sha256")
 _IDENTITY_KEYS = ("release_id", "system_uri")
 _GROUNDING_KEYS = ("candidate_count_checked", "status")
-_MATCHING_KEYS = ("device", "method", "nvidia_preflight")
+_MATCHING_KEYS = ("device", "method", "nvidia_preflight", "variant_methods")
+_IMPLEMENTATION_KEYS = ("algorithms", "coe_version", "source_sha256")
+_ALGORITHM_KEYS = ("association", "matching", "mining")
+_PRIVACY_KEYS = (
+    "association_documents_skipped",
+    "candidate_terms_truncated",
+    "lexical_output_approved",
+    "min_cell_document_count",
+    "scrubbed_candidate_term_count",
+    "scrubbed_lexical_form_count",
+    "suppressed_association_row_count",
+    "suppressed_candidate_term_count",
+    "suppressed_coding_row_count",
+    "suppressed_lexical_form_count",
+)
 _PROCESSING_KEYS = (
     "corpus_content_set_sha256",
     "file_count",
@@ -81,6 +106,9 @@ _PROCESSING_KEYS = (
     "unique_form_count",
 )
 _LIMIT_KEYS = (
+    "max_association_codes_per_document",
+    "max_association_pairs",
+    "max_candidate_terms",
     "max_candidates_per_phrase_system",
     "max_file_bytes",
     "max_files",
@@ -92,8 +120,15 @@ _LIMIT_KEYS = (
     "max_total_tokens",
     "max_unique_phrases",
     "max_walk_entries",
+    "min_cell_document_count",
 )
-_TOTAL_KEYS = ("ambiguity_row_count", "coding_count_row_count")
+_TOTAL_KEYS = (
+    "ambiguity_row_count",
+    "association_row_count",
+    "candidate_term_row_count",
+    "coding_count_row_count",
+    "lexical_form_row_count",
+)
 _CODING_KEYS = (
     "coding_count_schema_version",
     "code",
@@ -110,6 +145,38 @@ _AMBIGUITY_KEYS = (
     "ambiguous_occurrence_count",
     "release_id",
     "system_uri",
+)
+_LEXICAL_KEYS = (
+    "code",
+    "document_count",
+    "form",
+    "lexical_form_schema_version",
+    "match_method",
+    "occurrence_count",
+    "release_id",
+    "system_uri",
+)
+_CANDIDATE_KEYS = (
+    "candidate_term_schema_version",
+    "document_count",
+    "form",
+    "occurrence_count",
+    "rank",
+    "salience",
+    "token_count",
+)
+_ASSOCIATION_KEYS = (
+    "association_schema_version",
+    "code_a",
+    "code_b",
+    "cooccurrence_document_count",
+    "document_count_a",
+    "document_count_b",
+    "npmi",
+    "release_id_a",
+    "release_id_b",
+    "system_uri_a",
+    "system_uri_b",
 )
 
 
@@ -362,7 +429,20 @@ def _integer(value: JsonValue, *, minimum: int = 0, maximum: int | None = None) 
     return value
 
 
-def _digest(value: JsonValue) -> str:
+def _boolean(value: JsonValue) -> bool:
+    if not isinstance(value, bool):
+        raise _fail("SCHEMA_INVALID", "A protected output boolean is invalid.")
+    return value
+
+
+def _score(value: JsonValue) -> str:
+    text = _string(value, maximum=32)
+    if _SCORE_PATTERN.fullmatch(text) is None:
+        raise _fail("SCHEMA_INVALID", "A protected output score is not a fixed-precision decimal.")
+    return text
+
+
+def _digest_value(value: JsonValue) -> str:
     digest = _string(value, maximum=_SHA256_LENGTH)
     if len(digest) != _SHA256_LENGTH or any(character not in "0123456789abcdef" for character in digest):
         raise _fail("SCHEMA_INVALID", "A protected output digest is invalid.")
@@ -378,26 +458,30 @@ def _identity_object(value: JsonValue) -> tuple[str, str]:
 
 def _validate_report(
     report: dict[str, JsonValue], expected_identities: tuple[tuple[str, str], ...]
-) -> tuple[ProtectedLimits, dict[str, JsonValue], dict[str, JsonValue]]:
+) -> tuple[ProtectedLimits, dict[str, JsonValue], dict[str, JsonValue], dict[str, JsonValue]]:
     require_exact_keys(report, _REPORT_KEYS, (), "protected_output")
-    _string(report["run_report_schema_version"], maximum=64, expected="protected-local-1.0.0")
+    _string(report["run_report_schema_version"], maximum=64, expected=RUN_REPORT_SCHEMA_VERSION)
     _string(report["status"], maximum=16, expected="succeeded")
     _string(report["execution_profile"], maximum=64, expected="protected_phi_local")
-    _digest(report["run_fingerprint"])
-    _digest(report["semantic_output_sha256"])
+    _digest_value(report["run_fingerprint"])
+    _digest_value(report["semantic_output_sha256"])
 
     attestation = _object(report["attestation"], _ATTESTATION_KEYS)
     if attestation["approved"] is not True:
         raise _fail("SCHEMA_INVALID", "The protected output approval state is invalid.")
     _integer(attestation["approval_ref_count"], minimum=2, maximum=3)
-    _digest(attestation["attestation_sha256"])
+    _digest_value(attestation["attestation_sha256"])
+    lexical_output_approved = _boolean(attestation["lexical_output_approved"])
     _string(attestation["output_classification"], maximum=64, expected="protected_aggregate")
     _string(attestation["profile"], maximum=64, expected="protected_phi_local")
     retention_policy_id = _string(attestation["retention_policy_id"], maximum=256)
     if _ATTESTATION_IDENTIFIER.fullmatch(retention_policy_id) is None:
         raise _fail("SCHEMA_INVALID", "The protected output retention-policy identifier is invalid.")
 
-    identities = tuple(_identity_object(item) for item in _array(report["terminologies"], length=7))
+    terminology_values = _array(report["terminologies"])
+    if len(terminology_values) != len(expected_identities):
+        raise _fail("TERMINOLOGY_MISMATCH", "The protected output is not bound to the supplied releases.")
+    identities = tuple(_identity_object(item) for item in terminology_values)
     if identities != expected_identities:
         raise _fail("TERMINOLOGY_MISMATCH", "The protected output is not bound to the supplied releases.")
 
@@ -405,12 +489,22 @@ def _validate_report(
     if tuple(limitations) != PROTECTED_LIMITATIONS:
         raise _fail("SCHEMA_INVALID", "The protected output limitations are not the required exact statements.")
 
+    implementation = _object(report["implementation"], _IMPLEMENTATION_KEYS)
+    _string(implementation["coe_version"], maximum=64)
+    _digest_value(implementation["source_sha256"])
+    algorithms = _object(implementation["algorithms"], _ALGORITHM_KEYS)
+    for key in _ALGORITHM_KEYS:
+        _string(algorithms[key], maximum=128)
+
     matching = _object(report["matching"], _MATCHING_KEYS)
     _string(matching["device"], maximum=16, expected="cpu")
-    _string(matching["method"], maximum=64, expected="exact_preferred_and_alias")
+    _string(matching["method"], maximum=64, expected="exact_and_deterministic_variants")
     nvidia = _string(matching["nvidia_preflight"], maximum=32)
     if nvidia not in {"not_required", "passed"}:
         raise _fail("SCHEMA_INVALID", "The protected output hardware preflight state is invalid.")
+    expected_methods = sorted(VARIANT_METHOD_PRIORITY, key=lambda item: VARIANT_METHOD_PRIORITY[item])
+    if matching["variant_methods"] != expected_methods:
+        raise _fail("SCHEMA_INVALID", "The protected output variant-method list is invalid.")
 
     limit_values = _object(report["resource_limits"], _LIMIT_KEYS)
     try:
@@ -418,8 +512,25 @@ def _validate_report(
     except TypeError:
         raise _fail("SCHEMA_INVALID", "The protected output resource limits are invalid.") from None
 
+    privacy = _object(report["privacy"], _PRIVACY_KEYS)
+    if _boolean(privacy["lexical_output_approved"]) != lexical_output_approved:
+        raise _fail("SCHEMA_INVALID", "The protected output lexical approval states disagree.")
+    if _integer(privacy["min_cell_document_count"], minimum=1) != limits.min_cell_document_count:
+        raise _fail("SCHEMA_INVALID", "The protected output small-cell floors disagree.")
+    _boolean(privacy["candidate_terms_truncated"])
+    for key in (
+        "association_documents_skipped",
+        "scrubbed_candidate_term_count",
+        "scrubbed_lexical_form_count",
+        "suppressed_association_row_count",
+        "suppressed_candidate_term_count",
+        "suppressed_coding_row_count",
+        "suppressed_lexical_form_count",
+    ):
+        _integer(privacy[key])
+
     processing = _object(report["processing_totals"], _PROCESSING_KEYS)
-    _digest(processing["corpus_content_set_sha256"])
+    _digest_value(processing["corpus_content_set_sha256"])
     _integer(processing["file_count"], minimum=1, maximum=limits.max_files)
     total_bytes = _integer(processing["total_bytes"], maximum=limits.max_total_bytes)
     _integer(processing["total_characters"], maximum=total_bytes)
@@ -433,32 +544,36 @@ def _validate_report(
     _string(grounding["status"], maximum=16, expected="passed")
     _integer(
         grounding["candidate_count_checked"],
-        maximum=unique_forms * _EXPECTED_TERMINOLOGY_COUNT * limits.max_candidates_per_phrase_system,
+        maximum=unique_forms * len(expected_identities) * limits.max_candidates_per_phrase_system,
     )
 
     totals = _object(report["totals"], _TOTAL_KEYS)
-    _integer(totals["ambiguity_row_count"], maximum=_MAX_AMBIGUITY_ROWS)
+    _integer(totals["ambiguity_row_count"], maximum=len(expected_identities))
     _integer(totals["coding_count_row_count"], maximum=min(_MAX_CODING_ROWS, unique_forms * 7))
+    _integer(totals["lexical_form_row_count"], maximum=unique_forms * len(expected_identities))
+    _integer(totals["candidate_term_row_count"], maximum=min(limits.max_candidate_terms, unique_forms))
+    _integer(totals["association_row_count"], maximum=limits.max_association_pairs)
+    if not lexical_output_approved and (
+        totals["lexical_form_row_count"] != 0 or totals["candidate_term_row_count"] != 0
+    ):
+        raise _fail("SCHEMA_INVALID", "Lexical rows are present without lexical output approval.")
 
-    artifacts = _array(report["artifacts"], length=2)
+    artifacts = _array(report["artifacts"], length=len(PROTECTED_ARTIFACT_FILES))
     parsed_artifacts: dict[str, dict[str, JsonValue]] = {}
     for value in artifacts:
         artifact = _object(value, _ARTIFACT_KEYS)
         path = _string(artifact["path"], maximum=64)
-        if path not in {"ambiguity_counts.jsonl", "coding_counts.jsonl"} or path in parsed_artifacts:
+        if path not in PROTECTED_ARTIFACT_FILES or path in parsed_artifacts:
             raise _fail("SCHEMA_INVALID", "The protected output artifact manifest is invalid.")
         _string(artifact["media_type"], maximum=64, expected="application/x-ndjson")
-        _string(artifact["schema_version"], maximum=16, expected="1.0.0")
+        _string(artifact["schema_version"], maximum=16, expected=PROTECTED_ROW_SCHEMA_VERSION)
         _integer(artifact["byte_count"], maximum=_MAX_JSONL_BYTES)
         _integer(artifact["row_count"], maximum=_MAX_CODING_ROWS)
-        _digest(artifact["sha256"])
+        _digest_value(artifact["sha256"])
         parsed_artifacts[path] = artifact
-    if [str(_object(item, _ARTIFACT_KEYS)["path"]) for item in artifacts] != [
-        "ambiguity_counts.jsonl",
-        "coding_counts.jsonl",
-    ]:
+    if [str(_object(item, _ARTIFACT_KEYS)["path"]) for item in artifacts] != list(PROTECTED_ARTIFACT_FILES):
         raise _fail("SCHEMA_INVALID", "The protected output artifact manifest order is invalid.")
-    return limits, processing, parsed_artifacts
+    return limits, processing, parsed_artifacts, privacy
 
 
 @dataclass(slots=True)
@@ -467,19 +582,21 @@ class _CodingValidator:
     file_count: int
     total_ngrams: int
     unique_forms: int
+    floor: int
     previous: tuple[str, str, str] | None = None
     form_count: int = 0
+    documents: dict[tuple[str, str, str], int] = field(default_factory=dict)
 
     def accept(self, value: dict[str, JsonValue]) -> None:
         row = _object(value, _CODING_KEYS)
-        _string(row["coding_count_schema_version"], maximum=16, expected="1.0.0")
+        _string(row["coding_count_schema_version"], maximum=16, expected=PROTECTED_ROW_SCHEMA_VERSION)
         identity = _identity_object({"release_id": row["release_id"], "system_uri": row["system_uri"]})
         code = _string(row["code"], maximum=128)
         key = (*identity, code)
         if identity not in self.identity_indexes or (self.previous is not None and key <= self.previous):
             raise _fail("GROUNDING_FAILED", "A protected coding row has invalid release grounding or order.")
         form_count = _integer(row["distinct_matched_form_count"], minimum=1, maximum=self.unique_forms)
-        document_count = _integer(row["exact_match_document_count"], minimum=1, maximum=self.file_count)
+        document_count = _integer(row["exact_match_document_count"], minimum=self.floor, maximum=self.file_count)
         occurrence_count = _integer(row["exact_match_occurrence_count"], minimum=1, maximum=self.total_ngrams)
         if form_count > occurrence_count or document_count > occurrence_count:
             raise _fail("TOTALS_INVALID", "A protected coding row contains inconsistent counts.")
@@ -490,6 +607,7 @@ class _CodingValidator:
         if not grounded:
             raise _fail("GROUNDING_FAILED", "A protected coding row is outside the supplied release.")
         self.form_count += form_count
+        self.documents[key] = document_count
         self.previous = key
 
 
@@ -504,7 +622,7 @@ class _AmbiguityValidator:
 
     def accept(self, value: dict[str, JsonValue]) -> None:
         row = _object(value, _AMBIGUITY_KEYS)
-        _string(row["ambiguity_count_schema_version"], maximum=16, expected="1.0.0")
+        _string(row["ambiguity_count_schema_version"], maximum=16, expected=PROTECTED_ROW_SCHEMA_VERSION)
         identity = _identity_object({"release_id": row["release_id"], "system_uri": row["system_uri"]})
         self.identities.append(identity)
         form_count = _integer(row["ambiguous_form_count"], maximum=self.unique_forms)
@@ -519,6 +637,133 @@ class _AmbiguityValidator:
     def finish(self) -> None:
         if tuple(self.identities) != self.expected_identities:
             raise _fail("GROUNDING_FAILED", "Protected ambiguity rows do not match the supplied releases.")
+
+
+@dataclass(slots=True)
+class _LexicalValidator:
+    identity_indexes: dict[tuple[str, str], ProtectedExactIndex]
+    file_count: int
+    total_ngrams: int
+    floor: int
+    approved: bool
+    previous: tuple[str, str, str, str] | None = None
+
+    def accept(self, value: dict[str, JsonValue]) -> None:
+        if not self.approved:
+            raise _fail("SCHEMA_INVALID", "Lexical rows are present without lexical output approval.")
+        row = _object(value, _LEXICAL_KEYS)
+        _string(row["lexical_form_schema_version"], maximum=16, expected=PROTECTED_ROW_SCHEMA_VERSION)
+        identity = _identity_object({"release_id": row["release_id"], "system_uri": row["system_uri"]})
+        code = _string(row["code"], maximum=128)
+        form = _string(row["form"], maximum=256)
+        if not scrub_allows_form(form):
+            raise _fail("PRIVACY_INVALID", "A protected lexical form violates the scrub rules.", security=True)
+        method = _string(row["match_method"], maximum=64)
+        if method not in VARIANT_METHOD_PRIORITY:
+            raise _fail("SCHEMA_INVALID", "A protected lexical row has an unknown match method.")
+        key = (*identity, code, form)
+        if identity not in self.identity_indexes or (self.previous is not None and key <= self.previous):
+            raise _fail("GROUNDING_FAILED", "A protected lexical row has invalid release grounding or order.")
+        document_count = _integer(row["document_count"], minimum=self.floor, maximum=self.file_count)
+        occurrence_count = _integer(row["occurrence_count"], minimum=1, maximum=self.total_ngrams)
+        if document_count > occurrence_count:
+            raise _fail("TOTALS_INVALID", "A protected lexical row contains inconsistent counts.")
+        try:
+            grounded = code in self.identity_indexes[identity].reference.code_catalog
+        except Exception:
+            raise _fail("GROUNDING_FAILED", "A protected lexical row could not be grounded.") from None
+        if not grounded:
+            raise _fail("GROUNDING_FAILED", "A protected lexical row is outside the supplied release.")
+        self.previous = key
+
+
+@dataclass(slots=True)
+class _CandidateValidator:
+    indexes: tuple[ProtectedExactIndex, ...]
+    file_count: int
+    total_ngrams: int
+    floor: int
+    approved: bool
+    max_ngram_tokens: int
+    previous_rank: int = 0
+
+    def accept(self, value: dict[str, JsonValue]) -> None:
+        if not self.approved:
+            raise _fail("SCHEMA_INVALID", "Candidate rows are present without lexical output approval.")
+        row = _object(value, _CANDIDATE_KEYS)
+        _string(row["candidate_term_schema_version"], maximum=16, expected=PROTECTED_ROW_SCHEMA_VERSION)
+        form = _string(row["form"], maximum=256)
+        if not scrub_allows_form(form):
+            raise _fail("PRIVACY_INVALID", "A protected candidate term violates the scrub rules.", security=True)
+        rank = _integer(row["rank"], minimum=1)
+        if rank != self.previous_rank + 1:
+            raise _fail("SCHEMA_INVALID", "Protected candidate ranks must be dense and increasing.")
+        document_count = _integer(row["document_count"], minimum=self.floor, maximum=self.file_count)
+        occurrence_count = _integer(row["occurrence_count"], minimum=1, maximum=self.total_ngrams)
+        if document_count > occurrence_count:
+            raise _fail("TOTALS_INVALID", "A protected candidate row contains inconsistent counts.")
+        _integer(row["token_count"], minimum=1, maximum=self.max_ngram_tokens)
+        _score(row["salience"])
+        folded = normalize_lexical(form).folded
+        for index in self.indexes:
+            try:
+                if grounded_lookup(index, form, folded):
+                    raise _fail(
+                        "GROUNDING_FAILED",
+                        "A protected candidate term is grounded and must not be a candidate.",
+                    )
+            except ContractError:
+                raise
+            except Exception:
+                raise _fail("GROUNDING_FAILED", "A protected candidate term could not be checked.") from None
+        self.previous_rank = rank
+
+
+@dataclass(slots=True)
+class _AssociationValidator:
+    identity_indexes: dict[tuple[str, str], ProtectedExactIndex]
+    file_count: int
+    floor: int
+    coding_documents: dict[tuple[str, str, str], int]
+    previous: tuple[str, str, str, str, str, str] | None = None
+
+    def accept(self, value: dict[str, JsonValue]) -> None:
+        row = _object(value, _ASSOCIATION_KEYS)
+        _string(row["association_schema_version"], maximum=16, expected=PROTECTED_ROW_SCHEMA_VERSION)
+        first = (
+            _string(row["system_uri_a"], maximum=2_048),
+            _string(row["release_id_a"], maximum=2_048),
+            _string(row["code_a"], maximum=128),
+        )
+        second = (
+            _string(row["system_uri_b"], maximum=2_048),
+            _string(row["release_id_b"], maximum=2_048),
+            _string(row["code_b"], maximum=128),
+        )
+        if first >= second:
+            raise _fail("SCHEMA_INVALID", "A protected association row is not canonically ordered.")
+        key = first + second
+        if self.previous is not None and key <= self.previous:
+            raise _fail("SCHEMA_INVALID", "Protected association rows are not canonically sorted.")
+        together = _integer(row["cooccurrence_document_count"], minimum=self.floor, maximum=self.file_count)
+        count_a = _integer(row["document_count_a"], minimum=together, maximum=self.file_count)
+        count_b = _integer(row["document_count_b"], minimum=together, maximum=self.file_count)
+        _score(row["npmi"])
+        for identity_code, document_count in ((first, count_a), (second, count_b)):
+            identity = (identity_code[0], identity_code[1])
+            index = self.identity_indexes.get(identity)
+            if index is None:
+                raise _fail("GROUNDING_FAILED", "A protected association row names an unknown release.")
+            try:
+                grounded = identity_code[2] in index.reference.code_catalog
+            except Exception:
+                raise _fail("GROUNDING_FAILED", "A protected association row could not be grounded.") from None
+            if not grounded:
+                raise _fail("GROUNDING_FAILED", "A protected association row is outside the supplied release.")
+            known = self.coding_documents.get(identity_code)
+            if known is not None and document_count > known:
+                raise _fail("TOTALS_INVALID", "A protected association row exceeds its coding document count.")
+        self.previous = key
 
 
 def _verify_artifact_metadata(
@@ -540,39 +785,96 @@ def verify_protected_output(
     output_path: Path,
     indexes: tuple[ProtectedExactIndex, ...],
 ) -> dict[str, JsonValue]:
-    """Verify one protected-local output directory against seven index releases."""
+    """Verify one protected-local output directory against its index releases."""
 
     ordered_indexes = _ordered_indexes(indexes)
-    if len(ordered_indexes) != _EXPECTED_TERMINOLOGY_COUNT:
-        raise _fail("TERMINOLOGY_MISMATCH", "Exactly seven distinct terminology releases are required.")
+    if not 1 <= len(ordered_indexes) <= _MAX_TERMINOLOGY_COUNT:
+        raise _fail("TERMINOLOGY_MISMATCH", "Between one and seven distinct terminology releases are required.")
     expected_identities = tuple(_index_identity(index) for index in ordered_indexes)
     identity_indexes = {identity: index for identity, index in zip(expected_identities, ordered_indexes, strict=True)}
 
     root_before, inventory_before = _inventory(output_path)
     report = _read_report(output_path / "run_report.json")
-    limits, processing, artifacts = _validate_report(report, expected_identities)
+    limits, processing, artifacts, privacy = _validate_report(report, expected_identities)
+    file_count = int(processing["file_count"])
+    total_ngrams = int(processing["total_ngrams"])
+    unique_forms = int(processing["unique_form_count"])
+    floor = limits.min_cell_document_count
+    approved = bool(privacy["lexical_output_approved"])
+
     semantic_digest = hashlib.sha256()
-    semantic_digest.update(b'coe.protected-aggregate.v1\0{"ambiguity_counts":[')
+    semantic_digest.update(b'coe.protected-aggregate.v2\0{"ambiguity_counts":[')
     ambiguity_validator = _AmbiguityValidator(
         expected_identities=expected_identities,
-        file_count=int(processing["file_count"]),
-        total_ngrams=int(processing["total_ngrams"]),
-        unique_forms=int(processing["unique_form_count"]),
+        file_count=file_count,
+        total_ngrams=total_ngrams,
+        unique_forms=unique_forms,
     )
     ambiguity = _read_jsonl(
         output_path / "ambiguity_counts.jsonl",
-        maximum_rows=_MAX_AMBIGUITY_ROWS,
+        maximum_rows=len(expected_identities),
         validator=ambiguity_validator,
         semantic_digest=semantic_digest,
     )
     ambiguity_validator.finish()
+
+    coding_documents: dict[tuple[str, str, str], int] = {}
+    semantic_digest.update(b'],"associations":[')
+    association_validator = _AssociationValidator(
+        identity_indexes=identity_indexes,
+        file_count=file_count,
+        floor=floor,
+        coding_documents=coding_documents,
+    )
+    # Association rows are structurally validated during streaming; the
+    # coding-document cross-check runs after coding rows are read below,
+    # using this compact record of each row's identity/count fields.
+    association_rows: list[tuple[tuple[str, str, str], int, tuple[str, str, str], int, int]] = []
+
+    class _AssociationCollector:
+        def accept(self, value: dict[str, JsonValue]) -> None:
+            association_validator.accept(value)
+            association_rows.append(
+                (
+                    (str(value["system_uri_a"]), str(value["release_id_a"]), str(value["code_a"])),
+                    int(value["document_count_a"]),  # type: ignore[arg-type]
+                    (str(value["system_uri_b"]), str(value["release_id_b"]), str(value["code_b"])),
+                    int(value["document_count_b"]),  # type: ignore[arg-type]
+                    int(value["cooccurrence_document_count"]),  # type: ignore[arg-type]
+                )
+            )
+
+    association = _read_jsonl(
+        output_path / "associations.jsonl",
+        maximum_rows=limits.max_association_pairs,
+        validator=_AssociationCollector(),
+        semantic_digest=semantic_digest,
+    )
+
+    semantic_digest.update(b'],"candidate_terms":[')
+    candidate_validator = _CandidateValidator(
+        indexes=ordered_indexes,
+        file_count=file_count,
+        total_ngrams=total_ngrams,
+        floor=floor,
+        approved=approved,
+        max_ngram_tokens=limits.max_ngram_tokens,
+    )
+    candidate = _read_jsonl(
+        output_path / "candidate_terms.jsonl",
+        maximum_rows=min(limits.max_candidate_terms, max(unique_forms, 1)),
+        validator=candidate_validator,
+        semantic_digest=semantic_digest,
+    )
+
     semantic_digest.update(b'],"coding_counts":[')
-    coding_maximum = min(_MAX_CODING_ROWS, int(processing["unique_form_count"]) * 7)
+    coding_maximum = min(_MAX_CODING_ROWS, unique_forms * 7)
     coding_validator = _CodingValidator(
         identity_indexes=identity_indexes,
-        file_count=int(processing["file_count"]),
-        total_ngrams=int(processing["total_ngrams"]),
-        unique_forms=int(processing["unique_form_count"]),
+        file_count=file_count,
+        total_ngrams=total_ngrams,
+        unique_forms=unique_forms,
+        floor=floor,
     )
     coding = _read_jsonl(
         output_path / "coding_counts.jsonl",
@@ -580,27 +882,64 @@ def verify_protected_output(
         validator=coding_validator,
         semantic_digest=semantic_digest,
     )
-    semantic_digest.update(b'],"schema_version":"coe-protected-aggregate-v1"}')
+    coding_documents.update(coding_validator.documents)
 
-    _verify_artifact_metadata(artifacts, "ambiguity_counts.jsonl", ambiguity)
-    _verify_artifact_metadata(artifacts, "coding_counts.jsonl", coding)
-    coding_row_count = coding.row_count
-    exact_forms = coding_validator.form_count
-    ambiguity_row_count = ambiguity.row_count
-    ambiguous_forms = ambiguity_validator.form_count
+    semantic_digest.update(b'],"lexical_forms":[')
+    lexical_validator = _LexicalValidator(
+        identity_indexes=identity_indexes,
+        file_count=file_count,
+        total_ngrams=total_ngrams,
+        floor=floor,
+        approved=approved,
+    )
+    lexical = _read_jsonl(
+        output_path / "lexical_forms.jsonl",
+        maximum_rows=unique_forms * len(expected_identities) if unique_forms else 1,
+        validator=lexical_validator,
+        semantic_digest=semantic_digest,
+    )
+    semantic_digest.update(b'],"schema_version":"coe-protected-aggregate-v2"}')
+
+    for name, actual in (
+        ("ambiguity_counts.jsonl", ambiguity),
+        ("associations.jsonl", association),
+        ("candidate_terms.jsonl", candidate),
+        ("coding_counts.jsonl", coding),
+        ("lexical_forms.jsonl", lexical),
+    ):
+        _verify_artifact_metadata(artifacts, name, actual)
+
+    for first, count_a, second, count_b, _together in association_rows:
+        for identity_code, claimed in ((first, count_a), (second, count_b)):
+            known = coding_documents.get(identity_code)
+            if known is not None and claimed > known:
+                raise _fail("TOTALS_INVALID", "A protected association row exceeds its coding document count.")
+            if known is None and claimed >= floor:
+                # A code may appear in associations without a coding row only
+                # when its own document count sits below the small-cell floor.
+                raise _fail("TOTALS_INVALID", "A protected association row references a missing coding row.")
 
     totals = _object(report["totals"], _TOTAL_KEYS)
     if totals != {
-        "ambiguity_row_count": ambiguity_row_count,
-        "coding_count_row_count": coding_row_count,
+        "ambiguity_row_count": ambiguity.row_count,
+        "association_row_count": association.row_count,
+        "candidate_term_row_count": candidate.row_count,
+        "coding_count_row_count": coding.row_count,
+        "lexical_form_row_count": lexical.row_count,
     }:
         raise _fail("TOTALS_INVALID", "The protected output report row totals are inconsistent.")
+
+    exact_forms = coding_validator.form_count
+    ambiguous_forms = ambiguity_validator.form_count
     grounding = _object(report["grounding"], _GROUNDING_KEYS)
-    candidates = int(grounding["candidate_count_checked"])
-    minimum_candidates = exact_forms + (2 * ambiguous_forms)
-    maximum_candidates = exact_forms + (limits.max_candidates_per_phrase_system * ambiguous_forms)
-    if not minimum_candidates <= candidates <= maximum_candidates:
-        raise _fail("TOTALS_INVALID", "The protected output grounding total is inconsistent.")
+    candidates_checked = int(grounding["candidate_count_checked"])
+    # Suppressed coding rows still contributed grounded candidates at run
+    # time, so the exact interval only holds when nothing was suppressed.
+    if int(privacy["suppressed_coding_row_count"]) == 0:
+        minimum_candidates = exact_forms + (2 * ambiguous_forms)
+        maximum_candidates = exact_forms + (limits.max_candidates_per_phrase_system * ambiguous_forms)
+        if not minimum_candidates <= candidates_checked <= maximum_candidates:
+            raise _fail("TOTALS_INVALID", "The protected output grounding total is inconsistent.")
 
     semantic_output_sha256 = semantic_digest.hexdigest()
     if report["semantic_output_sha256"] != semantic_output_sha256:
@@ -611,18 +950,20 @@ def verify_protected_output(
         {
             "attestation": {
                 "attestation_sha256": attestation["attestation_sha256"],
+                "lexical_output_approved": attestation["lexical_output_approved"],
                 "output_classification": attestation["output_classification"],
                 "profile": attestation["profile"],
                 "retention_policy_id": attestation["retention_policy_id"],
             },
             "corpus_content_set_sha256": processing["corpus_content_set_sha256"],
+            "implementation": report["implementation"],
             "limits": limits.as_dict(),
             "semantic_output_sha256": semantic_output_sha256,
             "terminologies": [
                 {"release_id": release_id, "system_uri": system_uri} for system_uri, release_id in expected_identities
             ],
         },
-        domain=b"coe.protected-run.v1",
+        domain=FINGERPRINT_DOMAIN,
     )
     if report["run_fingerprint"] != run_fingerprint:
         raise _fail("RUN_INTEGRITY_FAILED", "The protected run fingerprint is invalid.")
@@ -632,11 +973,14 @@ def verify_protected_output(
         raise _fail("FILE_CHANGED", "The protected output changed during verification.", security=True)
 
     return {
-        "ambiguity_row_count": ambiguity_row_count,
-        "coding_count_row_count": coding_row_count,
+        "ambiguity_row_count": ambiguity.row_count,
+        "association_row_count": association.row_count,
+        "candidate_term_row_count": candidate.row_count,
+        "coding_count_row_count": coding.row_count,
+        "lexical_form_row_count": lexical.row_count,
         "run_fingerprint": run_fingerprint,
         "semantic_output_sha256": semantic_output_sha256,
         "status": "passed",
         "terminology_count": len(expected_identities),
-        "verification_schema_version": "protected-output-verification-1.0.0",
+        "verification_schema_version": "protected-output-verification-1.1.0",
     }

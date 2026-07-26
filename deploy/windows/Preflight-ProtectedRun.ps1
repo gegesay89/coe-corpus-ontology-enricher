@@ -124,6 +124,7 @@ try {
         "approval_refs",
         "approved",
         "attestation_schema_version",
+        "lexical_output_approved",
         "output_classification",
         "profile",
         "retention_policy_id"
@@ -134,7 +135,7 @@ try {
         throw "The protected-data attestation fields do not match its schema."
     }
     if (
-        $attestation.attestation_schema_version -ne "1.0.0" -or
+        $attestation.attestation_schema_version -ne "1.1.0" -or
         $attestation.profile -ne "protected_phi_local" -or
         $attestation.approved -ne $true -or
         $attestation.output_classification -ne "protected_aggregate"

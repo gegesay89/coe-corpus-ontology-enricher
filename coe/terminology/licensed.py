@@ -579,7 +579,12 @@ def _build_database(source: Path, target: Path, spec: TerminologySpec, entitleme
         connection.execute("PRAGMA temp_store=FILE")
         _schema(connection)
         connection.execute("BEGIN IMMEDIATE")
-        csv.field_size_limit(max(spec.max_designation_chars * 4, 131_072))
+        # One aliases cell may legally hold max_aliases_per_code entries of
+        # max_designation_chars each (plus delimiters), so size the parser cap
+        # to the largest cell the profile itself allows.
+        csv.field_size_limit(
+            max(spec.max_aliases_per_code * (spec.max_designation_chars + 1), spec.max_designation_chars * 4, 131_072)
+        )
         code_pattern = re.compile(spec.code_pattern)
         code_count = alias_count = active_count = 0
         seen_codes: set[str] = set()
@@ -605,7 +610,14 @@ def _build_database(source: Path, target: Path, spec: TerminologySpec, entitleme
                 )
             try:
                 for row_number, raw_row in enumerate(reader, start=2):
-                    if code_count >= MAX_ROWS or None in raw_row or any(value is None for value in raw_row.values()):
+                    if code_count >= MAX_ROWS:
+                        raise ContractError(
+                            "RESOURCE_LIMIT",
+                            "The terminology source exceeds the importer row ceiling.",
+                            f"{source.name}:{row_number}",
+                            4,
+                        )
+                    if None in raw_row or any(value is None for value in raw_row.values()):
                         raise ContractError(
                             "CSV_ROW_INVALID", "A terminology CSV row is malformed.", f"{source.name}:{row_number}", 3
                         )

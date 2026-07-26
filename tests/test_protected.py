@@ -40,7 +40,13 @@ class _Index:
         return ()
 
 
-def _write_attestation(path: Path, *, approved: bool = True, profile: str = "protected_phi_local") -> None:
+def _write_attestation(
+    path: Path,
+    *,
+    approved: bool = True,
+    profile: str = "protected_phi_local",
+    lexical_output_approved: bool = False,
+) -> None:
     path.write_text(
         json.dumps(
             {
@@ -50,7 +56,8 @@ def _write_attestation(path: Path, *, approved: bool = True, profile: str = "pro
                     "security": "SECURITY-SECRET-REF",
                 },
                 "approved": approved,
-                "attestation_schema_version": "1.0.0",
+                "attestation_schema_version": "1.1.0",
+                "lexical_output_approved": lexical_output_approved,
                 "output_classification": "protected_aggregate",
                 "profile": profile,
                 "retention_policy_id": "protected-local-30-day",
@@ -83,18 +90,22 @@ def test_protected_runner_emits_only_sanitized_aggregate_counts(tmp_path: Path) 
         attestation_path=attestation,
         indexes=(index,),
         output_path=output,
+        limits=ProtectedLimits(min_cell_document_count=1),
     )
 
     assert summary["status"] == "succeeded"
     assert sorted(path.name for path in output.iterdir()) == [
         "ambiguity_counts.jsonl",
+        "associations.jsonl",
+        "candidate_terms.jsonl",
         "coding_counts.jsonl",
+        "lexical_forms.jsonl",
         "run_report.json",
     ]
     assert _jsonl(output / "coding_counts.jsonl") == [
         {
             "code": "C1",
-            "coding_count_schema_version": "1.0.0",
+            "coding_count_schema_version": "1.1.0",
             "distinct_matched_form_count": 2,
             "exact_match_document_count": 2,
             "exact_match_occurrence_count": 2,
@@ -104,7 +115,7 @@ def test_protected_runner_emits_only_sanitized_aggregate_counts(tmp_path: Path) 
     ]
     assert _jsonl(output / "ambiguity_counts.jsonl") == [
         {
-            "ambiguity_count_schema_version": "1.0.0",
+            "ambiguity_count_schema_version": "1.1.0",
             "ambiguous_document_count": 2,
             "ambiguous_form_count": 1,
             "ambiguous_occurrence_count": 2,
@@ -112,12 +123,18 @@ def test_protected_runner_emits_only_sanitized_aggregate_counts(tmp_path: Path) 
             "system_uri": "urn:coe:test:protected",
         }
     ]
+    # Lexical output was not approved, so no surface form or unmapped text
+    # leaves the process even at floor 1.
+    assert _jsonl(output / "lexical_forms.jsonl") == []
+    assert _jsonl(output / "candidate_terms.jsonl") == []
+    assert _jsonl(output / "associations.jsonl") == []
     report = json.loads((output / "run_report.json").read_text(encoding="utf-8"))
-    assert report["matching"] == {
-        "device": "cpu",
-        "method": "exact_preferred_and_alias",
-        "nvidia_preflight": "not_required",
-    }
+    assert report["matching"]["device"] == "cpu"
+    assert report["matching"]["method"] == "exact_and_deterministic_variants"
+    assert report["matching"]["nvidia_preflight"] == "not_required"
+    assert report["privacy"]["lexical_output_approved"] is False
+    assert report["privacy"]["min_cell_document_count"] == 1
+    assert report["implementation"]["coe_version"]
     assert report["grounding"]["status"] == "passed"
     assert report["attestation"]["attestation_sha256"] == hashlib.sha256(attestation.read_bytes()).hexdigest()
 
@@ -135,6 +152,108 @@ def test_protected_runner_emits_only_sanitized_aggregate_counts(tmp_path: Path) 
         str(corpus).encode(),
     ):
         assert forbidden not in emitted
+
+
+class _EnrichmentIndex:
+    """Fake index: C1 = heart attack (preferred), C4 = hypertension (preferred)."""
+
+    def __init__(self) -> None:
+        self.reference = _Reference(code_catalog=frozenset({"C1", "C4"}))
+
+    def lookup(self, key: str, *, kind: str, variant: str) -> tuple[DesignationHit, ...]:
+        if kind == "preferred" and key.casefold() == "heart attack":
+            return (DesignationHit(code="C1", method="exact_preferred", variant=variant),)
+        if kind == "preferred" and key.casefold() == "hypertension":
+            return (DesignationHit(code="C4", method="exact_preferred", variant=variant),)
+        return ()
+
+
+def test_protected_lexical_enrichment_with_floor_scrub_and_associations(tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    for number in range(3):
+        (corpus / f"note-{number}.txt").write_text(
+            "Heart attack noted. HTN under control. Special unmapped finding.",
+            encoding="utf-8",
+        )
+    (corpus / "note-3.txt").write_text(
+        "Patient case 12345678 rare-single-doc-secret. hypertension.",
+        encoding="utf-8",
+    )
+    attestation = tmp_path / "attestation.json"
+    _write_attestation(attestation, lexical_output_approved=True)
+    output = tmp_path / "output"
+
+    summary = run_protected_local(
+        corpus_path=corpus,
+        attestation_path=attestation,
+        indexes=(_EnrichmentIndex(),),
+        output_path=output,
+        limits=ProtectedLimits(min_cell_document_count=3),
+    )
+    assert summary["status"] == "succeeded"
+
+    coding = {row["code"]: row for row in _jsonl(output / "coding_counts.jsonl")}
+    assert coding["C1"]["exact_match_document_count"] == 3
+    assert coding["C4"]["exact_match_document_count"] == 4
+
+    lexical = _jsonl(output / "lexical_forms.jsonl")
+    by_form = {(row["code"], row["form"]): row for row in lexical}
+    assert by_form[("C1", "Heart attack")]["match_method"] == "exact_preferred"
+    assert by_form[("C4", "HTN")]["match_method"] == "variant_abbreviation"
+    # The single-document form appears only once, far below the floor of 3.
+    assert not any("hypertension" == row["form"] for row in lexical)
+
+    candidates = _jsonl(output / "candidate_terms.jsonl")
+    candidate_forms = {row["form"] for row in candidates}
+    assert "Special unmapped finding" in candidate_forms
+    ranks = [row["rank"] for row in candidates]
+    assert ranks == list(range(1, len(ranks) + 1))
+
+    associations = _jsonl(output / "associations.jsonl")
+    pair = {(row["code_a"], row["code_b"]) for row in associations}
+    assert ("C1", "C4") in pair
+
+    report = json.loads((output / "run_report.json").read_text(encoding="utf-8"))
+    assert report["privacy"]["lexical_output_approved"] is True
+    assert report["privacy"]["suppressed_lexical_form_count"] > 0
+
+    emitted = b"".join(path.read_bytes() for path in output.iterdir())
+    for forbidden in (b"12345678", b"rare-single-doc-secret", b"note-0", str(corpus).encode()):
+        assert forbidden not in emitted
+
+
+def test_placeholder_attestation_refs_are_rejected(tmp_path: Path) -> None:
+    corpus, attestation, output = _fixture(tmp_path)
+    payload = json.loads(attestation.read_text(encoding="utf-8"))
+    payload["approval_refs"]["data_owner"] = "REPLACE-WITH-DATA-OWNER-APPROVAL-REFERENCE"
+    attestation.write_text(json.dumps(payload), encoding="utf-8")
+    index = _Index()
+    with pytest.raises(ContractError) as caught:
+        run_protected_local(
+            corpus_path=corpus,
+            attestation_path=attestation,
+            indexes=(index,),
+            output_path=output,
+        )
+    assert caught.value.code == "ATTESTATION_INVALID"
+    assert index.lookup_calls == 0
+    assert not output.exists()
+
+
+def test_small_cell_floor_suppresses_low_document_counts_by_default(tmp_path: Path) -> None:
+    corpus, attestation, output = _fixture(tmp_path)
+    run_protected_local(
+        corpus_path=corpus,
+        attestation_path=attestation,
+        indexes=(_Index(),),
+        output_path=output,
+    )
+    # The fixture has 2 documents; the default floor of 3 suppresses the row.
+    assert _jsonl(output / "coding_counts.jsonl") == []
+    report = json.loads((output / "run_report.json").read_text(encoding="utf-8"))
+    assert report["privacy"]["min_cell_document_count"] == 3
+    assert report["privacy"]["suppressed_coding_row_count"] == 1
 
 
 def test_protected_fingerprint_is_path_free_but_content_sensitive(tmp_path: Path) -> None:

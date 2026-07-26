@@ -1,0 +1,71 @@
+{
+  "$id": "https://coe.example.invalid/schemas/protected/1.1.0/association.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "association_schema_version": {
+      "const": "1.1.0"
+    },
+    "code_a": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "code_b": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "cooccurrence_document_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "document_count_a": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "document_count_b": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "npmi": {
+      "pattern": "^-?[0-9]+\\.[0-9]{6}$",
+      "type": "string"
+    },
+    "release_id_a": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "release_id_b": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "system_uri_a": {
+      "format": "uri",
+      "maxLength": 2048,
+      "type": "string"
+    },
+    "system_uri_b": {
+      "format": "uri",
+      "maxLength": 2048,
+      "type": "string"
+    }
+  },
+  "required": [
+    "association_schema_version",
+    "code_a",
+    "code_b",
+    "cooccurrence_document_count",
+    "document_count_a",
+    "document_count_b",
+    "npmi",
+    "release_id_a",
+    "release_id_b",
+    "system_uri_a",
+    "system_uri_b"
+  ],
+  "title": "COE protected code co-occurrence association",
+  "type": "object"
+}

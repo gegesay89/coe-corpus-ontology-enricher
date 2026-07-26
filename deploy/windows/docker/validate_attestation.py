@@ -52,14 +52,16 @@ def validate(attestation: dict[str, Any]) -> dict[str, Any]:
         "approval_refs",
         "retention_policy_id",
         "output_classification",
+        "lexical_output_approved",
     }
     if set(attestation) != required:
         raise AttestationError("The protected-data attestation fields do not match its schema.")
     if (
-        attestation["attestation_schema_version"] != "1.0.0"
+        attestation["attestation_schema_version"] != "1.1.0"
         or attestation["profile"] != "protected_phi_local"
         or attestation["approved"] is not True
         or attestation["output_classification"] != "protected_aggregate"
+        or not isinstance(attestation["lexical_output_approved"], bool)
     ):
         raise AttestationError("The protected-data attestation is not explicitly approved for this run.")
     approval_refs = attestation["approval_refs"]
@@ -75,11 +77,12 @@ def validate(attestation: dict[str, Any]) -> dict[str, Any]:
         _approval_reference(value)
     _approval_reference(attestation["retention_policy_id"])
     return {
-        "protected_attestation_check_schema_version": "1.0.0",
+        "protected_attestation_check_schema_version": "1.1.0",
         "status": "passed",
         "profile": "protected_phi_local",
         "output_classification": "protected_aggregate",
         "approval_ref_count": len(approval_refs),
+        "lexical_output_approved": attestation["lexical_output_approved"],
     }
 
 

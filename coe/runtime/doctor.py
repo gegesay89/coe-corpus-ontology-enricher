@@ -91,7 +91,7 @@ def probe_host(*, require_nvidia: bool = False) -> dict[str, JsonValue]:
     return {
         "architecture": platform.machine(),
         "exact_matching_device": "cpu",
-        "gpu_semantic_stage": "available" if devices else "unavailable",
+        "gpu_semantic_stage": "reserved_not_implemented",
         "nvidia": {
             "device_count": len(devices),
             "devices": [device.as_dict() for device in devices],

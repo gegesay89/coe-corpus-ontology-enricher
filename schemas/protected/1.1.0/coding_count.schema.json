@@ -1,0 +1,48 @@
+{
+  "$id": "https://coe.example.invalid/schemas/protected/1.1.0/coding_count.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "coding_count_schema_version": {
+      "const": "1.1.0"
+    },
+    "distinct_matched_form_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "exact_match_document_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "exact_match_occurrence_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "release_id": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "system_uri": {
+      "format": "uri",
+      "maxLength": 2048,
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "coding_count_schema_version",
+    "distinct_matched_form_count",
+    "exact_match_document_count",
+    "exact_match_occurrence_count",
+    "release_id",
+    "system_uri"
+  ],
+  "title": "COE protected coding count",
+  "type": "object"
+}

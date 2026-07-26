@@ -1,0 +1,179 @@
+{
+  "$defs": {
+    "candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "best_method": {
+          "enum": [
+            "exact_preferred",
+            "exact_alias",
+            "variant_compact",
+            "variant_abbreviation",
+            "variant_singular"
+          ]
+        },
+        "code": {
+          "type": "string"
+        },
+        "methods": {
+          "items": {
+            "enum": [
+              "exact_preferred",
+              "exact_alias",
+              "variant_compact",
+              "variant_abbreviation",
+              "variant_singular"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "rank": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "release_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "variants": {
+          "items": {
+            "enum": [
+              "primary",
+              "casefold",
+              "compact",
+              "abbreviation",
+              "singular"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "code",
+        "release_id",
+        "best_method",
+        "methods",
+        "variants",
+        "rank"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:coe:schema:candidate-set:1.1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "properties": {
+          "acceptance_state": {
+            "enum": [
+              "pending",
+              "curator_accepted",
+              "curator_rejected"
+            ]
+          },
+          "candidates": {
+            "minItems": 1
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "algorithmic_outcome": {
+            "const": "unmapped"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "acceptance_state": {
+            "const": null
+          },
+          "candidates": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "acceptance_state": {
+      "enum": [
+        "pending",
+        "curator_accepted",
+        "curator_rejected",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "algorithmic_outcome": {
+      "enum": [
+        "unmapped",
+        "grounded_unique",
+        "grounded_ambiguous"
+      ]
+    },
+    "candidate_set_schema_version": {
+      "const": "1.1.0"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/candidate"
+      },
+      "type": "array"
+    },
+    "document_frequency": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "language": {
+      "type": "string"
+    },
+    "note_type_counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "object"
+    },
+    "occurrence_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "primary_normalized_form": {
+      "type": "string"
+    },
+    "release_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "system_uri": {
+      "type": "string"
+    },
+    "token_count": {
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "candidate_set_schema_version",
+    "language",
+    "primary_normalized_form",
+    "token_count",
+    "occurrence_count",
+    "document_frequency",
+    "note_type_counts",
+    "system_uri",
+    "release_id",
+    "algorithmic_outcome",
+    "acceptance_state",
+    "candidates"
+  ],
+  "type": "object"
+}
