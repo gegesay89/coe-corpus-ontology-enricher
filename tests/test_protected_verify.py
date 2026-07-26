@@ -91,12 +91,13 @@ def test_verify_protected_output_recomputes_integrity_and_grounding(tmp_path: Pa
         "association_row_count": 0,
         "candidate_term_row_count": 0,
         "coding_count_row_count": 1,
+        "context_count_row_count": 1,
         "lexical_form_row_count": 0,
         "run_fingerprint": _read_report(output)["run_fingerprint"],
         "semantic_output_sha256": _read_report(output)["semantic_output_sha256"],
         "status": "passed",
         "terminology_count": 7,
-        "verification_schema_version": "protected-output-verification-1.1.0",
+        "verification_schema_version": "protected-output-verification-1.2.0",
     }
 
 

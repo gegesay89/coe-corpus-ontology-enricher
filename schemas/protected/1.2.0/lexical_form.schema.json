@@ -1,0 +1,68 @@
+{
+  "$id": "https://coe.example.invalid/schemas/protected/1.2.0/lexical_form.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "context": {
+      "enum": [
+        "current_clinical",
+        "historical",
+        "negated",
+        "non_patient"
+      ]
+    },
+    "document_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "form": {
+      "maxLength": 80,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lexical_form_schema_version": {
+      "const": "1.2.0"
+    },
+    "match_method": {
+      "enum": [
+        "exact_preferred",
+        "exact_alias",
+        "variant_compact",
+        "variant_abbreviation",
+        "variant_singular"
+      ]
+    },
+    "occurrence_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "release_id": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "system_uri": {
+      "format": "uri",
+      "maxLength": 2048,
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "context",
+    "document_count",
+    "form",
+    "lexical_form_schema_version",
+    "match_method",
+    "occurrence_count",
+    "release_id",
+    "system_uri"
+  ],
+  "title": "COE protected dataset lexical form (synonym evidence)",
+  "type": "object"
+}

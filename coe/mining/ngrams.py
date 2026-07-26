@@ -5,6 +5,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Decimal
 
+from coe.context import CONTEXT_CURRENT_CLINICAL, document_context
 from coe.contracts.config import AnalysisConfig
 from coe.contracts.snapshot import Document
 from coe.errors import ContractError
@@ -12,9 +13,10 @@ from coe.ingest.normalize import normalize_lexical
 
 # A single newline is soft (hard-wrapped clinical text keeps its phrases);
 # a blank line, terminal punctuation, or a bullet/numbered line start splits.
-_SENTENCE_BOUNDARY = re.compile(
-    r"(?:[ \t]*\r?\n){2,}[ \t]*|[!?;]+|(?<!\d)\.(?!\d)|\r?\n(?=[ \t]*(?:[-*•]|\d+[.)])[ \t])"
-)
+# A period followed by a digit is a decimal ("5.0") and never a boundary; a
+# period *preceded* by a digit still ends a sentence, because clinical notes
+# routinely close one with a year or a value ("... in 2019. Next ...").
+_SENTENCE_BOUNDARY = re.compile(r"(?:[ \t]*\r?\n){2,}[ \t]*|[!?;]+|\.(?!\d)|\r?\n(?=[ \t]*(?:[-*•]|\d+[.)])[ \t])")
 _TOKEN = re.compile(r"[^\W_]+(?:[./+-][^\W_]+)*\+?", re.UNICODE)
 
 
@@ -27,6 +29,7 @@ class PhraseOccurrence:
     folded: str
     surface: str
     token_count: int
+    context: str = CONTEXT_CURRENT_CLINICAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,11 +70,18 @@ def sentence_spans(text: str) -> tuple[tuple[int, int], ...]:
     return tuple(spans)
 
 
-def mine_document(document: Document, config: AnalysisConfig) -> tuple[PhraseOccurrence, ...]:
+def mine_document(
+    document: Document,
+    config: AnalysisConfig,
+    *,
+    qualify_context: bool = False,
+) -> tuple[PhraseOccurrence, ...]:
+    spans = sentence_spans(document.text)
+    contexts = document_context(document.text, spans) if qualify_context else None
     sentence_tokens: list[list[tuple[int, int]]] = []
     token_total = 0
     ngram_total = 0
-    for sentence_start, sentence_end in sentence_spans(document.text):
+    for sentence_start, sentence_end in spans:
         tokens = [
             (sentence_start + match.start(), sentence_start + match.end())
             for match in _TOKEN.finditer(document.text[sentence_start:sentence_end])
@@ -103,6 +113,9 @@ def mine_document(document: Document, config: AnalysisConfig) -> tuple[PhraseOcc
                             folded=lexical.folded,
                             surface=surface,
                             token_count=n,
+                            context=(
+                                contexts.classify(start, end) if contexts is not None else CONTEXT_CURRENT_CLINICAL
+                            ),
                         )
                     )
     return tuple(occurrences)

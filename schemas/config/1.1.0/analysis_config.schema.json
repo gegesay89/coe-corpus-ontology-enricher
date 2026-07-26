@@ -7,7 +7,7 @@
           "const": "coe-in-memory-exact/1.0.0-synthetic-only"
         },
         "mining": {
-          "const": "coe-sentence-bounded-token-ngrams/1.1.0"
+          "const": "coe-sentence-bounded-token-ngrams/1.2.0"
         },
         "normalizer": {
           "const": "coe-conservative/1.0.0"

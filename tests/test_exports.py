@@ -119,6 +119,7 @@ def test_skos_export_builds_concepts_labels_and_relations(tmp_path: Path) -> Non
     assert 'skos:notation "C4"' in text
     # The dataset synonym HTN becomes a label for the hypertension concept.
     assert 'skos:altLabel "HTN"@en' in text
+    assert "coe:currentClinicalDocumentCount" in text
     assert "skos:related" in text
     assert "coe:runFingerprint" in text
 

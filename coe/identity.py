@@ -10,9 +10,10 @@ from pathlib import Path
 from coe import __version__
 from coe.canonical import JsonValue, sha256_bytes, sha256_canonical
 
-MINING_ALGORITHM_VERSION = "coe-sentence-bounded-token-ngrams/1.1.0"
+MINING_ALGORITHM_VERSION = "coe-sentence-bounded-token-ngrams/1.2.0"
 MATCHING_ALGORITHM_VERSION = "coe-exact-and-deterministic-variants/1.0.0"
 ASSOCIATION_ALGORITHM_VERSION = "coe-document-cooccurrence-npmi/1.0.0"
+CONTEXT_ALGORITHM_VERSION = "coe-lexical-context-screen/1.0.0"
 
 
 def implementation_sha256() -> str:
@@ -54,6 +55,7 @@ def protected_implementation_identity() -> dict[str, JsonValue]:
     return {
         "algorithms": {
             "association": ASSOCIATION_ALGORITHM_VERSION,
+            "context": CONTEXT_ALGORITHM_VERSION,
             "matching": MATCHING_ALGORITHM_VERSION,
             "mining": MINING_ALGORITHM_VERSION,
         },

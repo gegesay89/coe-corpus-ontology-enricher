@@ -99,13 +99,14 @@ def test_protected_runner_emits_only_sanitized_aggregate_counts(tmp_path: Path) 
         "associations.jsonl",
         "candidate_terms.jsonl",
         "coding_counts.jsonl",
+        "context_counts.jsonl",
         "lexical_forms.jsonl",
         "run_report.json",
     ]
     assert _jsonl(output / "coding_counts.jsonl") == [
         {
             "code": "C1",
-            "coding_count_schema_version": "1.1.0",
+            "coding_count_schema_version": "1.2.0",
             "distinct_matched_form_count": 2,
             "exact_match_document_count": 2,
             "exact_match_occurrence_count": 2,
@@ -115,7 +116,7 @@ def test_protected_runner_emits_only_sanitized_aggregate_counts(tmp_path: Path) 
     ]
     assert _jsonl(output / "ambiguity_counts.jsonl") == [
         {
-            "ambiguity_count_schema_version": "1.1.0",
+            "ambiguity_count_schema_version": "1.2.0",
             "ambiguous_document_count": 2,
             "ambiguous_form_count": 1,
             "ambiguous_occurrence_count": 2,
@@ -221,6 +222,60 @@ def test_protected_lexical_enrichment_with_floor_scrub_and_associations(tmp_path
     emitted = b"".join(path.read_bytes() for path in output.iterdir())
     for forbidden in (b"12345678", b"rare-single-doc-secret", b"note-0", str(corpus).encode()):
         assert forbidden not in emitted
+
+
+def test_context_qualification_separates_negated_family_and_historical_evidence(tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    # Every note mentions "heart attack" (C1) three ways and "hypertension"
+    # (C4) once as an affirmed current finding.
+    for number in range(3):
+        (corpus / f"note-{number}.txt").write_text(
+            "Hypertension controlled. "
+            "No evidence of heart attack. "
+            "Family history of heart attack. "
+            "History of heart attack in 2019. "
+            "Heart attack confirmed today.",
+            encoding="utf-8",
+        )
+    attestation = tmp_path / "attestation.json"
+    _write_attestation(attestation, lexical_output_approved=True)
+    output = tmp_path / "output"
+
+    run_protected_local(
+        corpus_path=corpus,
+        attestation_path=attestation,
+        indexes=(_EnrichmentIndex(),),
+        output_path=output,
+        limits=ProtectedLimits(min_cell_document_count=3),
+    )
+
+    context = {(row["code"], row["context"]): row for row in _jsonl(output / "context_counts.jsonl")}
+    # All four contexts are present for the same code and each is counted once
+    # per document, so the partition is visible rather than collapsed.
+    assert context[("C1", "current_clinical")]["document_count"] == 3
+    assert context[("C1", "negated")]["document_count"] == 3
+    assert context[("C1", "non_patient")]["document_count"] == 3
+    assert context[("C1", "historical")]["document_count"] == 3
+    assert context[("C4", "current_clinical")]["document_count"] == 3
+    assert ("C4", "negated") not in context
+
+    # Occurrence counts across contexts partition the coding total exactly.
+    coding = {row["code"]: row for row in _jsonl(output / "coding_counts.jsonl")}
+    partitioned = sum(int(row["occurrence_count"]) for (code, _), row in context.items() if code == "C1")
+    assert partitioned == coding["C1"]["exact_match_occurrence_count"]
+
+    # Associations are current-clinical only: the family-history and negated
+    # co-mentions must not manufacture a C1-C4 relationship beyond the
+    # affirmed evidence.
+    associations = _jsonl(output / "associations.jsonl")
+    assert len(associations) == 1
+    assert associations[0]["document_count_a"] == 3
+    assert associations[0]["document_count_b"] == 3
+
+    report = json.loads((output / "run_report.json").read_text(encoding="utf-8"))
+    assert report["matching"]["context_default"] == "current_clinical"
+    assert report["implementation"]["algorithms"]["context"]
 
 
 def test_placeholder_attestation_refs_are_rejected(tmp_path: Path) -> None:

@@ -1,6 +1,6 @@
 services:
   coe:
-    image: "${COE_IMAGE_NAME:-coe-protected-local:0.3.0a1}"
+    image: "${COE_IMAGE_NAME:-coe-protected-local:0.4.0a1}"
     pull_policy: never
     build:
       context: ..

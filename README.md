@@ -1,12 +1,12 @@
 # COE Corpus Ontology Enricher
 
-COE v0.3 alpha is a standalone, offline corpus-ontology-enrichment system with three deliberately separate execution profiles:
+COE v0.4 alpha is a standalone, offline corpus-ontology-enrichment system with three deliberately separate execution profiles:
 
 - a PHI-free synthetic vertical slice for deterministic regression testing, with a completable hash-chained curation workflow;
 - a private licensed-reference importer that builds immutable, cross-platform SQLite indexes; and
-- a protected-local plaintext runner that produces the four corpus-enrichment outputs — coding frequency, dataset lexical forms (synonym evidence), unmapped candidate terms, and code co-occurrence associations — under a small-cell suppression floor, a deterministic scrub filter, and an explicit lexical-output attestation gate.
+- a protected-local plaintext runner that produces the corpus-enrichment outputs — coding frequency, mention-context breakdown, dataset lexical forms (synonym evidence), unmapped candidate terms, and code co-occurrence associations — under a small-cell suppression floor, a deterministic scrub filter, and an explicit lexical-output attestation gate.
 
-It is not a publication system or a clinical decision system. Candidate evidence is not acceptance, coding counts are not clinical prevalence, association rows are co-mention statistics and not clinical relationships, and all protected derivatives remain restricted.
+It is not a publication system or a clinical decision system. Candidate evidence is not acceptance, coding counts are lexical evidence across every mention context rather than clinical prevalence, association rows are co-mention statistics and not clinical relationships, and all protected derivatives remain restricted.
 
 ## Install and test
 
@@ -18,6 +18,21 @@ uv run ruff format --check .
 uv run ruff check .
 uv run pytest
 ```
+
+## Mention context
+
+Every mention is assigned exactly one context label, so counts partition cleanly and a negated or family-history mention never masquerades as a finding:
+
+| Label | Meaning |
+|---|---|
+| `current_clinical` | affirmed, patient, present — the clinical default |
+| `negated` | the sentence asserts the concept is absent ("no evidence of", "denies", "ruled out") |
+| `non_patient` | the mention belongs to a family member or other person ("family history of", "mother had") |
+| `historical` | the patient's past rather than the present ("history of", "status post", "prior") |
+
+Precedence is negated > non_patient > historical > current_clinical: a negated family-history mention is, first of all, not an assertion about the patient. Scoping is bounded by sentence, word distance, and scope-breaking conjunctions ("no fever **but** reports cough" leaves the cough affirmed), and EHR section headers (`Family History:`, `Past Medical History:`) scope their block until a header like `Assessment:` resets it.
+
+The rules are a conservative lexical screen, not a parser. They cannot resolve nested or long-range scope, so `current_clinical` remains lexical evidence rather than a clinical finding.
 
 ## Matching
 
@@ -114,11 +129,12 @@ Runs and verification accept between one and seven releases; the releases suppli
 
 The protected adapter accepts recursively discovered UTF-8 `.txt` files only. It rejects links, junctions, reparse points, hard links, and nonregular inputs, applies bounded resource limits, reads inputs in place, and atomically writes exactly six files:
 
-- `coding_counts.jsonl` — uniquely grounded coding evidence with frequency counts;
+- `coding_counts.jsonl` — uniquely grounded coding evidence with frequency counts, across every mention context;
 - `ambiguity_counts.jsonl` — per-system ambiguous evidence;
-- `lexical_forms.jsonl` — dataset surface forms per code (synonym evidence; empty unless lexical output is attested);
-- `candidate_terms.jsonl` — ranked frequent unmapped terms with tf-idf salience (empty unless lexical output is attested);
-- `associations.jsonl` — NPMI-scored code co-occurrence pairs; and
+- `context_counts.jsonl` — the mention-context breakdown per code (how much of the evidence is affirmed, negated, family, or historical);
+- `lexical_forms.jsonl` — dataset surface forms per code and context (synonym evidence; empty unless lexical output is attested);
+- `candidate_terms.jsonl` — ranked frequent unmapped terms with tf-idf salience and their affirmed-mention count (empty unless lexical output is attested);
+- `associations.jsonl` — NPMI-scored code co-occurrence pairs, computed from current-clinical mentions only; and
 - `run_report.json` with restricted, path-free provenance, software identity, privacy counters, and hashes.
 
 The enriched result exports to interchange formats without any added runtime dependency:
@@ -128,7 +144,7 @@ uv run coe export csv --run /restricted/run/output --output /restricted/run/csv
 uv run coe export skos --run /restricted/run/output --output /restricted/run/scheme.ttl
 ```
 
-The SKOS Turtle carries one `skos:Concept` per coding row (`skos:notation` = the standard code), dataset synonyms as `skos:prefLabel`/`skos:altLabel`, and associations as `skos:related`. Exported files inherit the restricted classification of their source run.
+The SKOS Turtle carries one `skos:Concept` per coding row (`skos:notation` = the standard code), dataset synonyms as `skos:prefLabel`/`skos:altLabel`, associations as `skos:related`, and each concept's affirmed-mention count as `coe:currentClinicalDocumentCount`. Only current-clinical surface forms become labels: a term seen solely in negated or family context is evidence about the corpus, not a synonym worth publishing. Exported files inherit the restricted classification of their source run.
 
 Raw lexical material exists transiently in Python process memory; Python cannot guarantee secure erasure. Host access, swap, crash-dump, endpoint-protection, encryption, and retention controls therefore remain mandatory.
 
@@ -141,8 +157,8 @@ The portable deployment is native-Windows-first so it also works on Windows Serv
 ```bash
 uv build
 uv run python tools/build_windows_bundle.py \
-  --wheel dist/coe_corpus_ontology_enricher-0.3.0a1-py3-none-any.whl \
-  --output artifacts/coe-windows-0.3.0a1.zip
+  --wheel dist/coe_corpus_ontology_enricher-0.4.0a1-py3-none-any.whl \
+  --output artifacts/coe-windows-0.4.0a1.zip
 
 uv run python tools/build_reference_bundle.py \
   --reference-set private_build/references \
@@ -157,7 +173,8 @@ The application archive contains no terminology payload or patient data. The sec
 
 - Patient inputs and every protected output stay on the authorized host and are treated as restricted data; SKOS/CSV exports of protected runs inherit that classification.
 - There is no network, telemetry, automatic acceptance, or public export path. Curation is explicit and human-recorded; nothing is auto-accepted.
-- Matching is exact-plus-deterministic-variants; there is no embedding or context-qualification stage, so negated, historical, and family-history mentions still count as lexical evidence.
+- Matching is exact-plus-deterministic-variants; there is no embedding stage.
+- Context qualification is a bounded lexical screen: it separates negated, family, and historical mentions but cannot resolve nested or long-range scope, so `current_clinical` counts remain lexical evidence rather than confirmed findings.
 - The protected adapter has not been connected to a live database, PDF/DOCX extraction path, or a specific remote patient-data layout.
 - The local attestation is an unsigned procedural gate; an authorized reviewer must still verify its corpus scope, purpose, validity window, approval status, and lexical-output decision before each production run.
 - CPT source metadata identifies the private Athena export date, not an authoritative CPT edition; publication remains blocked until that edition and destination rights are recorded.

@@ -343,7 +343,7 @@ def inspect_analysis_config(
         "normalizer": "coe-conservative/1.0.0",
         "span_matcher": "coe-exact-span/1.1.0",
         "index_schema": "coe-in-memory-exact/1.0.0-synthetic-only",
-        "mining": "coe-sentence-bounded-token-ngrams/1.1.0",
+        "mining": "coe-sentence-bounded-token-ngrams/1.2.0",
         "variant_matcher": "coe-exact-and-deterministic-variants/1.0.0",
     }:
         raise ContractError(

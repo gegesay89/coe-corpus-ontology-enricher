@@ -254,7 +254,7 @@ def test_compose_enforces_no_network_nonroot_readonly_inputs_and_restricted_outp
 def test_container_wrapper_pins_image_id_and_atomically_publishes_staged_output() -> None:
     wrapper = _read(WINDOWS / "Invoke-WslDocker.ps1")
 
-    assert '$expectedImageTag = "coe-protected-local:0.3.0a1"' in wrapper
+    assert '$expectedImageTag = "coe-protected-local:0.4.0a1"' in wrapper
     assert 'docker.exe image inspect --format "{{.Id}}"' in wrapper
     assert "^sha256:[0-9a-f]{64}$" in wrapper
     assert "$env:COE_IMAGE_NAME = $containerImageId" in wrapper
@@ -359,19 +359,20 @@ def test_container_entrypoint_uses_protected_cli_and_all_seven_indexes() -> None
 
 def test_output_verifier_delegates_to_the_trusted_core_verifier() -> None:
     verifier = _read(WINDOWS / "Verify-Run.ps1")
-    assert "protected-local-1.1.0" in verifier
+    assert "protected-local-1.2.0" in verifier
     assert "protected_aggregate" in verifier
     assert "ReferenceSetPath" in verifier
     assert "PythonExe" in verifier
     assert "reference verify-set" in verifier
     assert '"protected", "verify", "--output", $output' in verifier
-    assert "protected-output-verification-1.1.0" in verifier
+    assert "protected-output-verification-1.2.0" in verifier
     assert "trusted_core_verification_schema_version" in verifier
     assert "SetEquals($referenceIdentities)" in verifier
     assert "reportItem.Length -gt 1048576" in verifier
     assert "unsupported field" in verifier
     assert "association_row_count" in verifier
     assert "lexical_form_row_count" in verifier
+    assert "context_count_row_count" in verifier
     # The wrapper must not re-implement the aggregate row contract: the core
     # verifier is the single semantic implementation.
     assert "Test-CoeAggregateRow" not in verifier

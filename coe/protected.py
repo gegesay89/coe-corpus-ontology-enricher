@@ -35,6 +35,7 @@ from coe.canonical import (
     sha256_bytes,
     sha256_canonical,
 )
+from coe.context import CONTEXT_CURRENT_CLINICAL, CONTEXT_LABELS
 from coe.contracts.config import AnalysisConfig, MiningConfig, ResourceLimits
 from coe.contracts.snapshot import Document
 from coe.errors import ContractError, OutputExistsError
@@ -46,17 +47,18 @@ from coe.terminology.variants import VARIANT_METHOD_PRIORITY, grounded_lookup
 
 ATTESTATION_SCHEMA_VERSION = "1.1.0"
 OUTPUT_CLASSIFICATION = "protected_aggregate"
-PROTECTED_ROW_SCHEMA_VERSION = "1.1.0"
-RUN_REPORT_SCHEMA_VERSION = "protected-local-1.1.0"
-SEMANTIC_AGGREGATE_SCHEMA = "coe-protected-aggregate-v2"
-FINGERPRINT_DOMAIN = b"coe.protected-run.v2"
+PROTECTED_ROW_SCHEMA_VERSION = "1.2.0"
+RUN_REPORT_SCHEMA_VERSION = "protected-local-1.2.0"
+SEMANTIC_AGGREGATE_SCHEMA = "coe-protected-aggregate-v3"
+FINGERPRINT_DOMAIN = b"coe.protected-run.v3"
 MAX_ATTESTATION_BYTES = 65_536
 _ATTESTATION_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}")
 _PLACEHOLDER_PREFIXES = ("TEST-ONLY", "REPLACE-WITH")
 PROTECTED_LIMITATIONS = (
     "aggregate protected output; not de-identified or approved for public release",
-    "exact and deterministic-variant n-gram evidence is not context-qualified or overlap-resolved",
-    "coding counts are lexical evidence and not clinical prevalence",
+    "exact and deterministic-variant n-gram evidence is lexically scoped and not overlap-resolved",
+    "coding counts are lexical evidence across every mention context and not clinical prevalence",
+    "context qualification is a conservative lexical screen and not a parser",
     "rows below the small-cell document floor are suppressed and reported only as counts",
     "candidate terms are unreviewed corpus text approved for restricted curation only",
     "association rows are document co-mention statistics and not clinical relationships",
@@ -66,6 +68,7 @@ PROTECTED_ARTIFACT_FILES = (
     "associations.jsonl",
     "candidate_terms.jsonl",
     "coding_counts.jsonl",
+    "context_counts.jsonl",
     "lexical_forms.jsonl",
 )
 
@@ -209,6 +212,13 @@ class _PhraseStats:
     token_count: int
     occurrence_count: int = 0
     documents: Counter[int] = field(default_factory=Counter)
+    # Mention context partitions occurrences: label -> document -> count.
+    context_documents: dict[str, Counter[int]] = field(default_factory=dict)
+
+    def observe(self, document_number: int, context: str) -> None:
+        self.occurrence_count += 1
+        self.documents[document_number] += 1
+        self.context_documents.setdefault(context, Counter())[document_number] += 1
 
 
 @dataclass(slots=True)
@@ -216,6 +226,16 @@ class _CodingStats:
     occurrence_count: int = 0
     documents: set[int] = field(default_factory=set)
     lexical_form_count: int = 0
+    context_documents: dict[str, set[int]] = field(default_factory=dict)
+    context_occurrences: Counter[str] = field(default_factory=Counter)
+
+    def merge(self, phrase: _PhraseStats) -> None:
+        self.occurrence_count += phrase.occurrence_count
+        self.documents.update(phrase.documents)
+        self.lexical_form_count += 1
+        for label, documents in phrase.context_documents.items():
+            self.context_documents.setdefault(label, set()).update(documents)
+            self.context_occurrences[label] += sum(documents.values())
 
 
 @dataclass(slots=True)
@@ -240,6 +260,7 @@ class _CorpusStats:
 class _AggregateResult:
     coding_rows: tuple[dict[str, JsonValue], ...]
     ambiguity_rows: tuple[dict[str, JsonValue], ...]
+    context_rows: tuple[dict[str, JsonValue], ...]
     lexical_rows: tuple[dict[str, JsonValue], ...]
     candidate_rows: tuple[dict[str, JsonValue], ...]
     association_rows: tuple[dict[str, JsonValue], ...]
@@ -454,7 +475,7 @@ def _read_corpus(root: Path, limits: ProtectedLimits) -> _CorpusStats:
             extraction_method="protected_local_plaintext",
             text=text,
         )
-        occurrences = mine_document(document, config)
+        occurrences = mine_document(document, config, qualify_context=True)
         file_tokens = sum(1 for occurrence in occurrences if occurrence.token_count == 1)
         total_tokens += file_tokens
         total_ngrams += len(occurrences)
@@ -469,8 +490,7 @@ def _read_corpus(root: Path, limits: ProtectedLimits) -> _CorpusStats:
                 phrases[occurrence.primary] = stats
             elif stats.folded != occurrence.folded:
                 raise ContractError("NORMALIZATION_FAILED", "Lexical normalization was inconsistent.", "analysis", 3)
-            stats.occurrence_count += 1
-            stats.documents[document_number] += 1
+            stats.observe(document_number, occurrence.context)
     return _CorpusStats(
         file_count=len(paths),
         content_set_sha256=sha256_canonical(
@@ -667,11 +687,11 @@ def _aggregate_matches(
                 code, method = next(iter(evidence.items()))
                 key = (system_uri, release_id, code)
                 stats = coding.setdefault(key, _CodingStats())
-                stats.occurrence_count += phrase.occurrence_count
-                stats.documents.update(phrase.documents)
-                stats.lexical_form_count += 1
+                stats.merge(phrase)
                 lexical.append((system_uri, release_id, code, primary, method, phrase))
-                for document_number in phrase.documents:
+                # Associations are built from current-clinical mentions only:
+                # co-occurring negations or family history are not findings.
+                for document_number in phrase.context_documents.get(CONTEXT_CURRENT_CLINICAL, ()):
                     doc_codes.setdefault(document_number, set()).add(key)
             elif len(evidence) > 1:
                 ambiguous = ambiguity[(system_uri, release_id)]
@@ -710,6 +730,33 @@ def _aggregate_matches(
         for (system_uri, release_id), stats in sorted(ambiguity.items())
     )
 
+    # Mention-context breakdown per code. Coding counts remain lexical
+    # evidence across every context; these rows say how much of that evidence
+    # is affirmed, patient, and current.
+    suppressed_context = 0
+    context_rows: list[dict[str, JsonValue]] = []
+    for (system_uri, release_id, code), stats in sorted(coding.items()):
+        if len(stats.documents) < floor:
+            continue
+        for label in CONTEXT_LABELS:
+            documents = stats.context_documents.get(label)
+            if not documents:
+                continue
+            if len(documents) < floor:
+                suppressed_context += 1
+                continue
+            context_rows.append(
+                {
+                    "code": code,
+                    "context": label,
+                    "context_count_schema_version": PROTECTED_ROW_SCHEMA_VERSION,
+                    "document_count": len(documents),
+                    "occurrence_count": stats.context_occurrences[label],
+                    "release_id": release_id,
+                    "system_uri": system_uri,
+                }
+            )
+
     suppressed_lexical = 0
     scrubbed_lexical = 0
     lexical_rows: list[dict[str, JsonValue]] = []
@@ -717,24 +764,31 @@ def _aggregate_matches(
         for system_uri, release_id, code, primary, method, phrase in sorted(
             lexical, key=lambda item: (item[0], item[1], item[2], item[3])
         ):
-            if len(phrase.documents) < floor:
-                suppressed_lexical += 1
-                continue
             if not scrub_allows_form(primary):
                 scrubbed_lexical += 1
                 continue
-            lexical_rows.append(
-                {
-                    "code": code,
-                    "document_count": len(phrase.documents),
-                    "form": primary,
-                    "lexical_form_schema_version": PROTECTED_ROW_SCHEMA_VERSION,
-                    "match_method": method,
-                    "occurrence_count": phrase.occurrence_count,
-                    "release_id": release_id,
-                    "system_uri": system_uri,
-                }
-            )
+            # One row per context so a synonym's trustworthiness is visible:
+            # forty affirmed mentions differ from forty negated ones.
+            for label in CONTEXT_LABELS:
+                documents = phrase.context_documents.get(label)
+                if not documents:
+                    continue
+                if len(documents) < floor:
+                    suppressed_lexical += 1
+                    continue
+                lexical_rows.append(
+                    {
+                        "code": code,
+                        "context": label,
+                        "document_count": len(documents),
+                        "form": primary,
+                        "lexical_form_schema_version": PROTECTED_ROW_SCHEMA_VERSION,
+                        "match_method": method,
+                        "occurrence_count": sum(documents.values()),
+                        "release_id": release_id,
+                        "system_uri": system_uri,
+                    }
+                )
 
     suppressed_candidates = 0
     scrubbed_candidates = 0
@@ -755,9 +809,13 @@ def _aggregate_matches(
             candidates_truncated = True
             reportable = reportable[: limits.max_candidate_terms]
         for rank, (document_count, occurrence_count, primary, phrase) in enumerate(reportable, start=1):
+            current = phrase.context_documents.get(CONTEXT_CURRENT_CLINICAL, {})
             candidate_rows.append(
                 {
                     "candidate_term_schema_version": PROTECTED_ROW_SCHEMA_VERSION,
+                    # How much of this candidate's evidence is affirmed,
+                    # patient, and current — a curator's first question.
+                    "current_clinical_document_count": len(current),
                     "document_count": document_count,
                     "form": primary,
                     "occurrence_count": occurrence_count,
@@ -767,7 +825,9 @@ def _aggregate_matches(
                 }
             )
 
-    code_documents = {key: stats.documents for key, stats in coding.items()}
+    code_documents = {
+        key: stats.context_documents.get(CONTEXT_CURRENT_CLINICAL, set()) for key, stats in coding.items()
+    }
     association_rows, suppressed_associations, association_documents_skipped = _association_rows(
         doc_codes, code_documents, corpus, limits
     )
@@ -782,11 +842,13 @@ def _aggregate_matches(
         "suppressed_association_row_count": suppressed_associations,
         "suppressed_candidate_term_count": suppressed_candidates,
         "suppressed_coding_row_count": suppressed_coding,
+        "suppressed_context_row_count": suppressed_context,
         "suppressed_lexical_form_count": suppressed_lexical,
     }
     return _AggregateResult(
         coding_rows=tuple(coding_rows),
         ambiguity_rows=ambiguity_rows,
+        context_rows=tuple(context_rows),
         lexical_rows=tuple(lexical_rows),
         candidate_rows=tuple(candidate_rows),
         association_rows=tuple(association_rows),
@@ -814,6 +876,7 @@ def _materialize_output(
         "associations.jsonl": aggregates.association_rows,
         "candidate_terms.jsonl": aggregates.candidate_rows,
         "coding_counts.jsonl": aggregates.coding_rows,
+        "context_counts.jsonl": aggregates.context_rows,
         "lexical_forms.jsonl": aggregates.lexical_rows,
     }
     artifacts = tuple(
@@ -826,10 +889,11 @@ def _materialize_output(
             "associations": list(aggregates.association_rows),
             "candidate_terms": list(aggregates.candidate_rows),
             "coding_counts": list(aggregates.coding_rows),
+            "context_counts": list(aggregates.context_rows),
             "lexical_forms": list(aggregates.lexical_rows),
             "schema_version": SEMANTIC_AGGREGATE_SCHEMA,
         },
-        domain=b"coe.protected-aggregate.v2",
+        domain=b"coe.protected-aggregate.v3",
     )
     run_fingerprint = sha256_canonical(
         {
@@ -870,6 +934,8 @@ def _materialize_output(
         "implementation": implementation,
         "limitations": list(PROTECTED_LIMITATIONS),
         "matching": {
+            "context_default": CONTEXT_CURRENT_CLINICAL,
+            "context_labels": list(CONTEXT_LABELS),
             "device": "cpu",
             "method": "exact_and_deterministic_variants",
             "nvidia_preflight": "passed" if require_nvidia else "not_required",
@@ -899,6 +965,7 @@ def _materialize_output(
             "association_row_count": len(aggregates.association_rows),
             "candidate_term_row_count": len(aggregates.candidate_rows),
             "coding_count_row_count": len(aggregates.coding_rows),
+            "context_count_row_count": len(aggregates.context_rows),
             "lexical_form_row_count": len(aggregates.lexical_rows),
         },
     }
@@ -908,6 +975,7 @@ def _materialize_output(
         "association_row_count": len(aggregates.association_rows),
         "candidate_term_row_count": len(aggregates.candidate_rows),
         "coding_count_row_count": len(aggregates.coding_rows),
+        "context_count_row_count": len(aggregates.context_rows),
         "lexical_form_row_count": len(aggregates.lexical_rows),
         "run_fingerprint": run_fingerprint,
         "semantic_output_sha256": semantic_output_sha256,

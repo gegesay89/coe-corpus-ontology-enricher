@@ -63,7 +63,7 @@ from the repository root:
 
 ```powershell
 .\deploy\windows\Build-PortableBundle.ps1 `
-  -WheelPath ".\dist\coe_corpus_ontology_enricher-0.3.0a1-py3-none-any.whl" `
+  -WheelPath ".\dist\coe_corpus_ontology_enricher-0.4.0a1-py3-none-any.whl" `
   -OutputPath "D:\Transfer\coe-windows-v0"
 ```
 
@@ -258,7 +258,7 @@ Compose uses `pull_policy: never`, build network isolation, runtime
 `network_mode: none`, no ports, numeric non-root execution, a read-only root,
 all capabilities dropped, `no-new-privileges`, and read-only mounts for corpus,
 reference set, and attestation. After an optional build, the wrapper resolves
-the fixed `coe-protected-local:0.3.0a1` tag to an immutable
+the fixed `coe-protected-local:0.4.0a1` tag to an immutable
 `sha256:<64-hex>` image ID, re-inspects that ID before and after execution, and
 records it in the safe run result. The run uses the image ID, never the mutable
 tag.

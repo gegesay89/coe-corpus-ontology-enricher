@@ -22,6 +22,7 @@ _EXPORTABLE = (
     "candidate_sets.jsonl",
     "candidate_terms.jsonl",
     "coding_counts.jsonl",
+    "context_counts.jsonl",
     "lexical_forms.jsonl",
     "matches.jsonl",
     "phrase_aggregates.jsonl",

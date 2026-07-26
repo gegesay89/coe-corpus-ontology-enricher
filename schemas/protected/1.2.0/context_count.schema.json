@@ -1,0 +1,52 @@
+{
+  "$id": "https://coe.example.invalid/schemas/protected/1.2.0/context_count.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "context": {
+      "enum": [
+        "current_clinical",
+        "historical",
+        "negated",
+        "non_patient"
+      ]
+    },
+    "context_count_schema_version": {
+      "const": "1.2.0"
+    },
+    "document_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "occurrence_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "release_id": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "system_uri": {
+      "format": "uri",
+      "maxLength": 2048,
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "context",
+    "context_count_schema_version",
+    "document_count",
+    "occurrence_count",
+    "release_id",
+    "system_uri"
+  ],
+  "title": "COE protected mention-context count",
+  "type": "object"
+}

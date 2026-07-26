@@ -107,13 +107,17 @@ def test_cli_protected_run_is_aggregate_only(tmp_path: Path) -> None:
     assert b"patient-name-must-not-export" not in exported
     rows = [json.loads(line) for line in (output / "coding_counts.jsonl").read_text(encoding="utf-8").splitlines()]
     assert rows[0]["code"] == "U1"
-    schemas = project / "schemas/protected/1.1.0"
+    schemas = project / "schemas/protected/1.2.0"
     cases = [
         ("data_use_attestation.schema.json", attestation_value),
         ("coding_count.schema.json", rows[0]),
         (
             "ambiguity_count.schema.json",
             json.loads((output / "ambiguity_counts.jsonl").read_text(encoding="utf-8").splitlines()[0]),
+        ),
+        (
+            "context_count.schema.json",
+            json.loads((output / "context_counts.jsonl").read_text(encoding="utf-8").splitlines()[0]),
         ),
         ("run_report.schema.json", json.loads((output / "run_report.json").read_text(encoding="utf-8"))),
     ]
@@ -192,6 +196,7 @@ def test_cli_protected_verify_uses_seven_verified_sqlite_releases(tmp_path: Path
         "association_row_count": 21,
         "candidate_term_row_count": 0,
         "coding_count_row_count": 7,
+        "context_count_row_count": 7,
         "lexical_form_row_count": 0,
         "run_fingerprint": json.loads((output / "run_report.json").read_text(encoding="utf-8"))["run_fingerprint"],
         "semantic_output_sha256": json.loads((output / "run_report.json").read_text(encoding="utf-8"))[
@@ -199,5 +204,5 @@ def test_cli_protected_verify_uses_seven_verified_sqlite_releases(tmp_path: Path
         ],
         "status": "passed",
         "terminology_count": 7,
-        "verification_schema_version": "protected-output-verification-1.1.0",
+        "verification_schema_version": "protected-output-verification-1.2.0",
     }

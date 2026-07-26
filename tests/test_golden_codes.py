@@ -163,6 +163,23 @@ def test_golden_clinical_codes_ground_end_to_end(tmp_path: Path) -> None:
     methods = {(row["code"], row["form"]): row["match_method"] for row in lexical}
     assert methods[("38341003", "HTN")] == "variant_abbreviation"
     assert methods[("22298006", "heart attack")] == "exact_alias"
+    # "Prior heart attack" is a past mention, so that form is historical while
+    # the affirmed findings stay current-clinical.
+    contexts_by_form = {(row["code"], row["form"]): row["context"] for row in lexical}
+    assert contexts_by_form[("22298006", "heart attack")] == "historical"
+    assert contexts_by_form[("386661006", "fever")] == "current_clinical"
+    assert contexts_by_form[("38341003", "HTN")] == "current_clinical"
+
+    context = {
+        (row["code"], row["context"])
+        for row in (
+            json.loads(line) for line in (output / "context_counts.jsonl").read_text(encoding="utf-8").splitlines()
+        )
+    }
+    assert ("386661006", "current_clinical") in context
+    assert ("22298006", "historical") in context
+    # The negation-free golden note produces no negated evidence at all.
+    assert not any(label == "negated" for _, label in context)
 
     associations = [
         json.loads(line) for line in (output / "associations.jsonl").read_text(encoding="utf-8").splitlines()

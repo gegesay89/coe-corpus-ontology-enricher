@@ -6,6 +6,10 @@ frequent form doubles as skos:prefLabel), and document co-occurrence
 associations as skos:related. The Turtle is hand-emitted with strict string
 escaping so the exporter adds no runtime dependency, and rows are ordered
 deterministically.
+
+Only ``current_clinical`` surface forms become labels: a term observed solely
+in negated or family-history context is evidence about the corpus, not a
+synonym worth publishing for the concept.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ import json
 from pathlib import Path
 
 from coe.canonical import JsonValue
+from coe.context import CONTEXT_CURRENT_CLINICAL
 from coe.errors import ContractError
 
 _MAX_ARTIFACT_BYTES = 1_000_000_000
@@ -61,12 +66,19 @@ def export_skos(run_path: Path, output_path: Path, *, base_iri: str = DEFAULT_BA
     coding_rows = _read_rows(run_path / "coding_counts.jsonl")
     lexical_rows = _read_rows(run_path / "lexical_forms.jsonl")
     association_rows = _read_rows(run_path / "associations.jsonl")
+    context_rows = _read_rows(run_path / "context_counts.jsonl")
 
     concepts: dict[tuple[str, str], dict[str, JsonValue]] = {}
     for row in coding_rows:
         concepts[(str(row["system_uri"]), str(row["code"]))] = row
+    current_clinical: dict[tuple[str, str], int] = {}
+    for row in context_rows:
+        if str(row["context"]) == CONTEXT_CURRENT_CLINICAL:
+            current_clinical[(str(row["system_uri"]), str(row["code"]))] = int(row["document_count"])  # type: ignore[arg-type]
     labels: dict[tuple[str, str], list[tuple[int, str, str]]] = {}
     for row in lexical_rows:
+        if str(row["context"]) != CONTEXT_CURRENT_CLINICAL:
+            continue
         key = (str(row["system_uri"]), str(row["code"]))
         labels.setdefault(key, []).append(
             (-int(row["occurrence_count"]), str(row["form"]), str(row["match_method"]))  # type: ignore[arg-type]
@@ -91,6 +103,7 @@ def export_skos(run_path: Path, output_path: Path, *, base_iri: str = DEFAULT_BA
         lines.append(f'    coe:releaseId "{_escape(str(row["release_id"]))}" ;')
         lines.append(f"    coe:documentCount {int(row['exact_match_document_count'])} ;")  # type: ignore[arg-type]
         lines.append(f"    coe:occurrenceCount {int(row['exact_match_occurrence_count'])} ;")  # type: ignore[arg-type]
+        lines.append(f"    coe:currentClinicalDocumentCount {current_clinical.get((system_uri, code), 0)} ;")
         concept_labels = sorted(labels.get((system_uri, code), ()))
         if concept_labels:
             preferred = concept_labels[0][1]

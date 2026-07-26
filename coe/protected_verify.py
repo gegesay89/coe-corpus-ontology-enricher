@@ -25,6 +25,7 @@ from coe.canonical import (
     require_exact_keys,
     sha256_canonical,
 )
+from coe.context import CONTEXT_CURRENT_CLINICAL, CONTEXT_LABELS
 from coe.errors import ContractError
 from coe.ingest.normalize import normalize_lexical
 from coe.protected import (
@@ -81,9 +82,9 @@ _ATTESTATION_KEYS = (
 _ARTIFACT_KEYS = ("byte_count", "media_type", "path", "row_count", "schema_version", "sha256")
 _IDENTITY_KEYS = ("release_id", "system_uri")
 _GROUNDING_KEYS = ("candidate_count_checked", "status")
-_MATCHING_KEYS = ("device", "method", "nvidia_preflight", "variant_methods")
+_MATCHING_KEYS = ("context_default", "context_labels", "device", "method", "nvidia_preflight", "variant_methods")
 _IMPLEMENTATION_KEYS = ("algorithms", "coe_version", "source_sha256")
-_ALGORITHM_KEYS = ("association", "matching", "mining")
+_ALGORITHM_KEYS = ("association", "context", "matching", "mining")
 _PRIVACY_KEYS = (
     "association_documents_skipped",
     "candidate_terms_truncated",
@@ -94,6 +95,7 @@ _PRIVACY_KEYS = (
     "suppressed_association_row_count",
     "suppressed_candidate_term_count",
     "suppressed_coding_row_count",
+    "suppressed_context_row_count",
     "suppressed_lexical_form_count",
 )
 _PROCESSING_KEYS = (
@@ -127,6 +129,7 @@ _TOTAL_KEYS = (
     "association_row_count",
     "candidate_term_row_count",
     "coding_count_row_count",
+    "context_count_row_count",
     "lexical_form_row_count",
 )
 _CODING_KEYS = (
@@ -146,8 +149,18 @@ _AMBIGUITY_KEYS = (
     "release_id",
     "system_uri",
 )
+_CONTEXT_KEYS = (
+    "code",
+    "context",
+    "context_count_schema_version",
+    "document_count",
+    "occurrence_count",
+    "release_id",
+    "system_uri",
+)
 _LEXICAL_KEYS = (
     "code",
+    "context",
     "document_count",
     "form",
     "lexical_form_schema_version",
@@ -158,6 +171,7 @@ _LEXICAL_KEYS = (
 )
 _CANDIDATE_KEYS = (
     "candidate_term_schema_version",
+    "current_clinical_document_count",
     "document_count",
     "form",
     "occurrence_count",
@@ -505,6 +519,9 @@ def _validate_report(
     expected_methods = sorted(VARIANT_METHOD_PRIORITY, key=lambda item: VARIANT_METHOD_PRIORITY[item])
     if matching["variant_methods"] != expected_methods:
         raise _fail("SCHEMA_INVALID", "The protected output variant-method list is invalid.")
+    _string(matching["context_default"], maximum=64, expected=CONTEXT_CURRENT_CLINICAL)
+    if matching["context_labels"] != list(CONTEXT_LABELS):
+        raise _fail("SCHEMA_INVALID", "The protected output context-label list is invalid.")
 
     limit_values = _object(report["resource_limits"], _LIMIT_KEYS)
     try:
@@ -525,6 +542,7 @@ def _validate_report(
         "suppressed_association_row_count",
         "suppressed_candidate_term_count",
         "suppressed_coding_row_count",
+        "suppressed_context_row_count",
         "suppressed_lexical_form_count",
     ):
         _integer(privacy[key])
@@ -550,7 +568,14 @@ def _validate_report(
     totals = _object(report["totals"], _TOTAL_KEYS)
     _integer(totals["ambiguity_row_count"], maximum=len(expected_identities))
     _integer(totals["coding_count_row_count"], maximum=min(_MAX_CODING_ROWS, unique_forms * 7))
-    _integer(totals["lexical_form_row_count"], maximum=unique_forms * len(expected_identities))
+    _integer(
+        totals["lexical_form_row_count"],
+        maximum=unique_forms * len(expected_identities) * len(CONTEXT_LABELS),
+    )
+    _integer(
+        totals["context_count_row_count"],
+        maximum=min(_MAX_CODING_ROWS, unique_forms * 7) * len(CONTEXT_LABELS),
+    )
     _integer(totals["candidate_term_row_count"], maximum=min(limits.max_candidate_terms, unique_forms))
     _integer(totals["association_row_count"], maximum=limits.max_association_pairs)
     if not lexical_output_approved and (
@@ -640,13 +665,65 @@ class _AmbiguityValidator:
 
 
 @dataclass(slots=True)
+class _ContextValidator:
+    """Verify the mention-context breakdown against the coding rows."""
+
+    identity_indexes: dict[tuple[str, str], ProtectedExactIndex]
+    file_count: int
+    total_ngrams: int
+    floor: int
+    previous: tuple[str, str, str, str] | None = None
+    documents: dict[tuple[str, str, str], int] = field(default_factory=dict)
+    occurrences: dict[tuple[str, str, str], int] = field(default_factory=dict)
+    current_documents: dict[tuple[str, str, str], int] = field(default_factory=dict)
+
+    def accept(self, value: dict[str, JsonValue]) -> None:
+        row = _object(value, _CONTEXT_KEYS)
+        _string(row["context_count_schema_version"], maximum=16, expected=PROTECTED_ROW_SCHEMA_VERSION)
+        identity = _identity_object({"release_id": row["release_id"], "system_uri": row["system_uri"]})
+        code = _string(row["code"], maximum=128)
+        label = _string(row["context"], maximum=32)
+        if label not in CONTEXT_LABELS:
+            raise _fail("SCHEMA_INVALID", "A protected context row has an unknown context label.")
+        key = (*identity, code, label)
+        if identity not in self.identity_indexes or (self.previous is not None and key <= self.previous):
+            raise _fail("GROUNDING_FAILED", "A protected context row has invalid release grounding or order.")
+        document_count = _integer(row["document_count"], minimum=self.floor, maximum=self.file_count)
+        occurrence_count = _integer(row["occurrence_count"], minimum=1, maximum=self.total_ngrams)
+        if document_count > occurrence_count:
+            raise _fail("TOTALS_INVALID", "A protected context row contains inconsistent counts.")
+        try:
+            grounded = code in self.identity_indexes[identity].reference.code_catalog
+        except Exception:
+            raise _fail("GROUNDING_FAILED", "A protected context row could not be grounded.") from None
+        if not grounded:
+            raise _fail("GROUNDING_FAILED", "A protected context row is outside the supplied release.")
+        code_key = (*identity, code)
+        self.documents[code_key] = max(self.documents.get(code_key, 0), document_count)
+        self.occurrences[code_key] = self.occurrences.get(code_key, 0) + occurrence_count
+        if label == CONTEXT_CURRENT_CLINICAL:
+            self.current_documents[code_key] = document_count
+        self.previous = key
+
+    def reconcile(self, coding_documents: dict[tuple[str, str, str], int]) -> None:
+        # Contexts partition a code's occurrences, so each context count is
+        # bounded by the code's totals and the per-code sum cannot exceed them.
+        for code_key, document_count in self.documents.items():
+            total = coding_documents.get(code_key)
+            if total is None:
+                raise _fail("TOTALS_INVALID", "A protected context row references a missing coding row.")
+            if document_count > total:
+                raise _fail("TOTALS_INVALID", "A protected context row exceeds its coding document count.")
+
+
+@dataclass(slots=True)
 class _LexicalValidator:
     identity_indexes: dict[tuple[str, str], ProtectedExactIndex]
     file_count: int
     total_ngrams: int
     floor: int
     approved: bool
-    previous: tuple[str, str, str, str] | None = None
+    previous: tuple[str, str, str, str, str] | None = None
 
     def accept(self, value: dict[str, JsonValue]) -> None:
         if not self.approved:
@@ -661,7 +738,10 @@ class _LexicalValidator:
         method = _string(row["match_method"], maximum=64)
         if method not in VARIANT_METHOD_PRIORITY:
             raise _fail("SCHEMA_INVALID", "A protected lexical row has an unknown match method.")
-        key = (*identity, code, form)
+        label = _string(row["context"], maximum=32)
+        if label not in CONTEXT_LABELS:
+            raise _fail("SCHEMA_INVALID", "A protected lexical row has an unknown context label.")
+        key = (*identity, code, form, label)
         if identity not in self.identity_indexes or (self.previous is not None and key <= self.previous):
             raise _fail("GROUNDING_FAILED", "A protected lexical row has invalid release grounding or order.")
         document_count = _integer(row["document_count"], minimum=self.floor, maximum=self.file_count)
@@ -702,6 +782,7 @@ class _CandidateValidator:
         occurrence_count = _integer(row["occurrence_count"], minimum=1, maximum=self.total_ngrams)
         if document_count > occurrence_count:
             raise _fail("TOTALS_INVALID", "A protected candidate row contains inconsistent counts.")
+        _integer(row["current_clinical_document_count"], maximum=document_count)
         _integer(row["token_count"], minimum=1, maximum=self.max_ngram_tokens)
         _score(row["salience"])
         folded = normalize_lexical(form).folded
@@ -803,7 +884,7 @@ def verify_protected_output(
     approved = bool(privacy["lexical_output_approved"])
 
     semantic_digest = hashlib.sha256()
-    semantic_digest.update(b'coe.protected-aggregate.v2\0{"ambiguity_counts":[')
+    semantic_digest.update(b'coe.protected-aggregate.v3\0{"ambiguity_counts":[')
     ambiguity_validator = _AmbiguityValidator(
         expected_identities=expected_identities,
         file_count=file_count,
@@ -884,6 +965,21 @@ def verify_protected_output(
     )
     coding_documents.update(coding_validator.documents)
 
+    semantic_digest.update(b'],"context_counts":[')
+    context_validator = _ContextValidator(
+        identity_indexes=identity_indexes,
+        file_count=file_count,
+        total_ngrams=total_ngrams,
+        floor=floor,
+    )
+    context = _read_jsonl(
+        output_path / "context_counts.jsonl",
+        maximum_rows=coding_maximum * len(CONTEXT_LABELS),
+        validator=context_validator,
+        semantic_digest=semantic_digest,
+    )
+    context_validator.reconcile(coding_documents)
+
     semantic_digest.update(b'],"lexical_forms":[')
     lexical_validator = _LexicalValidator(
         identity_indexes=identity_indexes,
@@ -894,17 +990,18 @@ def verify_protected_output(
     )
     lexical = _read_jsonl(
         output_path / "lexical_forms.jsonl",
-        maximum_rows=unique_forms * len(expected_identities) if unique_forms else 1,
+        maximum_rows=unique_forms * len(expected_identities) * len(CONTEXT_LABELS) if unique_forms else 1,
         validator=lexical_validator,
         semantic_digest=semantic_digest,
     )
-    semantic_digest.update(b'],"schema_version":"coe-protected-aggregate-v2"}')
+    semantic_digest.update(b'],"schema_version":"coe-protected-aggregate-v3"}')
 
     for name, actual in (
         ("ambiguity_counts.jsonl", ambiguity),
         ("associations.jsonl", association),
         ("candidate_terms.jsonl", candidate),
         ("coding_counts.jsonl", coding),
+        ("context_counts.jsonl", context),
         ("lexical_forms.jsonl", lexical),
     ):
         _verify_artifact_metadata(artifacts, name, actual)
@@ -918,6 +1015,11 @@ def verify_protected_output(
                 # A code may appear in associations without a coding row only
                 # when its own document count sits below the small-cell floor.
                 raise _fail("TOTALS_INVALID", "A protected association row references a missing coding row.")
+            # Associations are current-clinical only, so a claimed count must
+            # agree with the current-clinical context row when one exists.
+            current = context_validator.current_documents.get(identity_code)
+            if current is not None and claimed != current:
+                raise _fail("TOTALS_INVALID", "A protected association row disagrees with its context counts.")
 
     totals = _object(report["totals"], _TOTAL_KEYS)
     if totals != {
@@ -925,6 +1027,7 @@ def verify_protected_output(
         "association_row_count": association.row_count,
         "candidate_term_row_count": candidate.row_count,
         "coding_count_row_count": coding.row_count,
+        "context_count_row_count": context.row_count,
         "lexical_form_row_count": lexical.row_count,
     }:
         raise _fail("TOTALS_INVALID", "The protected output report row totals are inconsistent.")
@@ -977,10 +1080,11 @@ def verify_protected_output(
         "association_row_count": association.row_count,
         "candidate_term_row_count": candidate.row_count,
         "coding_count_row_count": coding.row_count,
+        "context_count_row_count": context.row_count,
         "lexical_form_row_count": lexical.row_count,
         "run_fingerprint": run_fingerprint,
         "semantic_output_sha256": semantic_output_sha256,
         "status": "passed",
         "terminology_count": len(expected_identities),
-        "verification_schema_version": "protected-output-verification-1.1.0",
+        "verification_schema_version": "protected-output-verification-1.2.0",
     }

@@ -39,11 +39,11 @@ def _fixture_project(tmp_path: Path) -> tuple[Path, Path]:
     (project / "docs").mkdir()
     (project / "docs/CONTROLLED_DEPLOYMENT.md").write_text("safe\n", encoding="utf-8")
     (project / "SECURITY.md").write_text("safe\n", encoding="utf-8")
-    wheel = tmp_path / "coe_corpus_ontology_enricher-0.3.0a1-py3-none-any.whl"
-    dist_info = "coe_corpus_ontology_enricher-0.3.0a1.dist-info"
+    wheel = tmp_path / "coe_corpus_ontology_enricher-0.4.0a1-py3-none-any.whl"
+    dist_info = "coe_corpus_ontology_enricher-0.4.0a1.dist-info"
     wheel_members = {
-        "coe/__init__.py": b'__version__ = "0.3.0a1"\n',
-        f"{dist_info}/METADATA": (b"Metadata-Version: 2.2\nName: coe-corpus-ontology-enricher\nVersion: 0.3.0a1\n\n"),
+        "coe/__init__.py": b'__version__ = "0.4.0a1"\n',
+        f"{dist_info}/METADATA": (b"Metadata-Version: 2.2\nName: coe-corpus-ontology-enricher\nVersion: 0.4.0a1\n\n"),
         f"{dist_info}/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
         f"{dist_info}/entry_points.txt": b"[console_scripts]\ncoe = coe.cli:main\n",
         f"{dist_info}/top_level.txt": b"coe\n",
@@ -100,7 +100,7 @@ def test_bundle_refuses_mislabeled_or_workstation_contaminated_wheel(tmp_path: P
 
     with zipfile.ZipFile(wheel, "a") as archive:
         archive.writestr(
-            "coe_corpus_ontology_enricher-0.3.0a1.data/data/share/coe/workstation_note.md",
+            "coe_corpus_ontology_enricher-0.4.0a1.data/data/share/coe/workstation_note.md",
             "/Users/example/private/source",
         )
     with pytest.raises(ValueError, match="prohibited workstation"):

@@ -99,6 +99,7 @@ try {
         "association_row_count",
         "candidate_term_row_count",
         "coding_count_row_count",
+        "context_count_row_count",
         "lexical_form_row_count",
         "run_fingerprint",
         "semantic_output_sha256",
@@ -108,7 +109,7 @@ try {
     ) -Label "The trusted protected-output verification result"
     if (
         $coreVerification.status -ne "passed" -or
-        $coreVerification.verification_schema_version -ne "protected-output-verification-1.1.0" -or
+        $coreVerification.verification_schema_version -ne "protected-output-verification-1.2.0" -or
         [int]$coreVerification.terminology_count -ne 7
     ) {
         throw "The trusted protected-output verifier did not satisfy its contract."
@@ -129,7 +130,7 @@ try {
         throw "The protected run report is unreadable or malformed."
     }
     if (
-        $report.run_report_schema_version -ne "protected-local-1.1.0" -or
+        $report.run_report_schema_version -ne "protected-local-1.2.0" -or
         $report.status -ne "succeeded" -or
         $report.execution_profile -ne "protected_phi_local" -or
         $report.attestation.output_classification -ne "protected_aggregate" -or
@@ -159,6 +160,7 @@ try {
         association_row_count = [Int64]$coreVerification.association_row_count
         candidate_term_row_count = [Int64]$coreVerification.candidate_term_row_count
         coding_count_row_count = [Int64]$coreVerification.coding_count_row_count
+        context_count_row_count = [Int64]$coreVerification.context_count_row_count
         lexical_form_row_count = [Int64]$coreVerification.lexical_form_row_count
         terminology_count = [int]$coreVerification.terminology_count
     })

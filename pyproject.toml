@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coe-corpus-ontology-enricher"
-version = "0.3.0a1"
+version = "0.4.0a1"
 description = "Deterministic corpus terminology analysis with controlled licensed-reference and protected-local profiles"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -67,6 +67,16 @@ include = ["coe*"]
 ]
 "share/coe/schemas/run/1.1.0" = [
   "schemas/run/1.1.0/candidate_set.schema.json",
+]
+"share/coe/schemas/protected/1.2.0" = [
+  "schemas/protected/1.2.0/data_use_attestation.schema.json",
+  "schemas/protected/1.2.0/coding_count.schema.json",
+  "schemas/protected/1.2.0/ambiguity_count.schema.json",
+  "schemas/protected/1.2.0/context_count.schema.json",
+  "schemas/protected/1.2.0/lexical_form.schema.json",
+  "schemas/protected/1.2.0/candidate_term.schema.json",
+  "schemas/protected/1.2.0/association.schema.json",
+  "schemas/protected/1.2.0/run_report.schema.json",
 ]
 "share/coe/schemas/protected/1.1.0" = [
   "schemas/protected/1.1.0/data_use_attestation.schema.json",

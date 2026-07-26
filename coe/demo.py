@@ -246,7 +246,7 @@ def _create_config(root: Path, manifest_sha256: str) -> None:
     config: dict[str, JsonValue] = {
         "algorithms": {
             "index_schema": "coe-in-memory-exact/1.0.0-synthetic-only",
-            "mining": "coe-sentence-bounded-token-ngrams/1.1.0",
+            "mining": "coe-sentence-bounded-token-ngrams/1.2.0",
             "normalizer": "coe-conservative/1.0.0",
             "span_matcher": "coe-exact-span/1.1.0",
             "tokenizer": "coe-regex-tokenizer/1.0.0",
