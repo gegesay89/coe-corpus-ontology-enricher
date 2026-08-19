@@ -8,7 +8,7 @@ COE v0.4 alpha is a standalone, offline corpus-ontology-enrichment system with t
 
 It is not a publication system or a clinical decision system. Candidate evidence is not acceptance, coding counts are lexical evidence across every mention context rather than clinical prevalence, association rows are co-mention statistics and not clinical relationships, and all protected derivatives remain restricted.
 
-Public code and the synthetic demo live at [carenova-ai.me/coe](https://carenova-ai.me/coe/). Licensed terminology indexes are not in this repository.
+Public code and the synthetic demo live at [gegesay89.github.io/coe](https://gegesay89.github.io/coe/). Licensed terminology indexes are not in this repository.
 
 ## Install and test
 
