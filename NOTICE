@@ -1,0 +1,6 @@
+COE Corpus Ontology Enricher
+Copyright 2026 Gehad Sayed Ahmed
+
+Licensed terminology files (SNOMED, CPT, RxNorm, LOINC, ICD-10-CM,
+ICD-10-PCS, HCPCS, and related publisher packages) are not included
+in this repository and remain under their publishers' terms.

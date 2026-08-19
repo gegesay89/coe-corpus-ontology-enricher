@@ -42,7 +42,7 @@ The defensible contribution is the combination of:
 
 The first production artifact should be described as a **corpus-enriched clinical terminology and association graph**. The word *ontology* is appropriate for the product name, but must not be used to imply formal axioms, inferred taxonomy, clinical truth, or prevalence estimates that the system does not produce.
 
-Prior art elsewhere may be used as a benchmark, but not as a code dependency. COE does not import an external resolver or knowledge-graph module.
+Prior systems may be used as a benchmark, but not as a code dependency. COE does not import an external resolver or knowledge-graph module.
 
 ### 1.1 Normative language
 
@@ -614,7 +614,7 @@ Normal WAL-logged `work` or `quarantine` tables MUST NOT be created in the durab
 
 - External coding node IDs are deterministic UUIDs derived with a permanently recorded namespace and canonicalization rule from canonical system identity and code; release changes do not change the node.
 - Local-concept IDs are random application-assigned UUIDs and never derived from mutable labels.
-- A stable local concept IRI follows an organization-controlled pattern such as `https://gegesay89.github.io/coe/id/concept/{uuid}` after the domain owner approves it.
+- A stable local concept IRI follows an organization-controlled pattern such as `https://carenova-ai.me/coe/id/concept/{uuid}` after the domain owner approves it.
 - External coding IRIs use the publisher/standards-authorized canonical form when defined; otherwise COE uses a stable proxy IRI without claiming ownership of the code system.
 - Release IRIs are versioned; concept IRIs are not.
 - Published identifiers are never recycled.

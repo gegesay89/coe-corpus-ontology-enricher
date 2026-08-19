@@ -8,6 +8,8 @@ COE v0.4 alpha is a standalone, offline corpus-ontology-enrichment system with t
 
 It is not a publication system or a clinical decision system. Candidate evidence is not acceptance, coding counts are lexical evidence across every mention context rather than clinical prevalence, association rows are co-mention statistics and not clinical relationships, and all protected derivatives remain restricted.
 
+Public code and the synthetic demo live at [carenova-ai.me/coe](https://carenova-ai.me/coe/). Licensed terminology indexes are not in this repository.
+
 ## Install and test
 
 Python 3.11 or newer and `uv` are required for development.
@@ -181,3 +183,7 @@ The application archive contains no terminology payload or patient data. The sec
 - GPU model, VRAM, driver, Windows edition, data layout, and WSL compatibility must be measured on the target host rather than inferred.
 
 See [SECURITY.md](SECURITY.md), [docs/CONTROLLED_DEPLOYMENT.md](docs/CONTROLLED_DEPLOYMENT.md), and the full [COE design and plan](COE_DESIGN_AND_PLAN.md) for the remaining production gates.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE). This repository does not redistribute SNOMED, CPT, RxNorm, LOINC, ICD, or HCPCS content. Those files stay on a licensed local machine and are imported through the private reference builder.
