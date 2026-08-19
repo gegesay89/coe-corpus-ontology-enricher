@@ -26,8 +26,17 @@ The protected runner emits only:
 
 - `coding_counts.jsonl`, aggregate exact-match counts by terminology coding;
 - `ambiguity_counts.jsonl`, aggregate ambiguous-match counts by terminology;
+- `context_counts.jsonl`, the mention-context breakdown per coding;
+- `lexical_forms.jsonl`, dataset surface forms per coding and context, empty
+  unless the attestation approves lexical output;
+- `candidate_terms.jsonl`, ranked frequent unmapped terms, empty unless the
+  attestation approves lexical output;
+- `associations.jsonl`, code co-occurrence pairs from current-clinical mentions;
 - `run_report.json`, path-free processing totals, limits, release identities,
   hashes, and limitations.
+
+The two lexical files carry corpus surface text when lexical output is attested,
+so they are the files to review before any transfer.
 
 The output intentionally contains no patient identifier, document identifier,
 source path, filename, phrase, snippet, or unmapped value. It is still classified

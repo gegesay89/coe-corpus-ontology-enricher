@@ -1,9 +1,10 @@
-"""Golden known-code smoke: real clinical codes through the licensed SQLite path.
+"""Golden known-code smoke: clinical codes through the licensed SQLite path.
 
-These fixtures carry a handful of genuine SNOMED CT / CPT / LOINC codes with
-their canonical displays so a systematic import corruption (for example a
-swapped code/display column mapping) cannot pass unnoticed the way a purely
-self-referential round-trip can.
+The condition and observation fixtures use a handful of widely published clinical
+codes and their common clinical terms, so a systematic import corruption (for
+example a swapped code/display column mapping) cannot pass unnoticed the way a
+purely self-referential round-trip can. The procedure fixture is synthetic: it
+exists to exercise a second code shape and carries no publisher descriptors.
 """
 
 from __future__ import annotations
@@ -29,13 +30,13 @@ _GOLDEN = {
             ("22298006", "Myocardial infarction", "heart attack"),
         ],
     },
-    "cptmini": {
-        "system_label": "CPT-MINI",
-        "system_uri": "http://www.ama-assn.org/go/cpt",
+    "procmini": {
+        "system_label": "PROC-MINI",
+        "system_uri": "urn:example:procedure-fixture",
         "code_pattern": "^[0-9]{5}$",
         "rows": [
-            ("19357", "Tissue expander placement in breast reconstruction", ""),
-            ("99213", "Office outpatient visit established patient", "office visit"),
+            ("10001", "Fixture procedure alpha", ""),
+            ("10002", "Fixture procedure beta", "fixture procedure"),
         ],
     },
     "loincmini": {
@@ -117,7 +118,7 @@ def _attestation(path: Path) -> None:
 
 
 def test_golden_clinical_codes_ground_end_to_end(tmp_path: Path) -> None:
-    indexes = tuple(_build_index(tmp_path, name) for name in ("snomedmini", "cptmini", "loincmini"))
+    indexes = tuple(_build_index(tmp_path, name) for name in ("snomedmini", "procmini", "loincmini"))
     corpus = tmp_path / "corpus"
     corpus.mkdir()
     for number in range(3):
@@ -131,17 +132,17 @@ def test_golden_clinical_codes_ground_end_to_end(tmp_path: Path) -> None:
 
     with (
         SQLiteTerminologyIndex(indexes[0]) as snomed,
-        SQLiteTerminologyIndex(indexes[1]) as cpt,
+        SQLiteTerminologyIndex(indexes[1]) as procedures,
         SQLiteTerminologyIndex(indexes[2]) as loinc,
     ):
         run_protected_local(
             corpus_path=corpus,
             attestation_path=attestation,
-            indexes=(snomed, cpt, loinc),
+            indexes=(snomed, procedures, loinc),
             output_path=output,
             limits=ProtectedLimits(min_cell_document_count=3),
         )
-        verified = verify_protected_output(output_path=output, indexes=(snomed, cpt, loinc))
+        verified = verify_protected_output(output_path=output, indexes=(snomed, procedures, loinc))
     assert verified["status"] == "passed"
 
     coding = {

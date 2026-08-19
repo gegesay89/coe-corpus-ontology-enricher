@@ -129,7 +129,7 @@ uv run coe protected verify \
 
 Runs and verification accept between one and seven releases; the releases supplied to `verify` must be exactly those the run was bound to.
 
-The protected adapter accepts recursively discovered UTF-8 `.txt` files only. It rejects links, junctions, reparse points, hard links, and nonregular inputs, applies bounded resource limits, reads inputs in place, and atomically writes exactly six files:
+The protected adapter accepts recursively discovered UTF-8 `.txt` files only. It rejects links, junctions, reparse points, hard links, and nonregular inputs, applies bounded resource limits, reads inputs in place, and atomically writes exactly seven files:
 
 - `coding_counts.jsonl` — uniquely grounded coding evidence with frequency counts, across every mention context;
 - `ambiguity_counts.jsonl` — per-system ambiguous evidence;
@@ -186,4 +186,4 @@ See [SECURITY.md](SECURITY.md), [docs/CONTROLLED_DEPLOYMENT.md](docs/CONTROLLED_
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE). This repository does not redistribute SNOMED, CPT, RxNorm, LOINC, ICD, or HCPCS content. Those files stay on a licensed local machine and are imported through the private reference builder.
+Apache License 2.0. See [LICENSE](LICENSE). This repository does not redistribute any terminology release, publisher package, or derived index. Test fixtures reference a small number of widely published clinical codes so that an import defect cannot pass unnoticed; licensed content stays on a licensed local machine and is imported through the private reference builder.
